@@ -133,9 +133,6 @@ class SubtreeVisitor(esprima.NodeVisitor):
         self.visit(node.discriminant)
         for child in node.cases:
             self.visit(child)
-    
-    def visit_ReturnStatement(self, node):
-        self.visit(node.argument)
         
 
 if __name__ == "__main__":

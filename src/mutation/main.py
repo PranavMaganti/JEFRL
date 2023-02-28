@@ -1,6 +1,4 @@
 
-from platform import node
-import esprima
 from esprima.nodes import Node
 from mutation.mutation_type import MutationType
 
