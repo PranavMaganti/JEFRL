@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "js-rl"
+version = "0.1.0"
+description = ""
+authors = ["Pranav Maganti <pranav.maganti@gmail.com>"]
+readme = "README.md"
+packages = [{include = "js_rl"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[tool.poetry.group.dev.dependencies]
+black = {version = "^23.1.0", allow-prereleases = true}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+    "integration",
+]
+

@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Javascript engines
+engines/*
+
+# VSCode
+.vscode/
