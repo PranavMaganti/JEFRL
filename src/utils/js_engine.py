@@ -1,10 +1,14 @@
-from multiprocessing import shared_memory
+import ctypes
+import math
 import os
 import subprocess
 import sys
-import ctypes
-import math
+import tempfile
+from multiprocessing import shared_memory
 from typing import Optional
+
+from nodes.main import Node
+from utils import escodegen
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
@@ -25,13 +29,16 @@ class ExecutionData:
         self.hit_edges = hit_edges
 
 
-def execute_test(file: str) -> Optional[ExecutionData]:
+def execute_test(code: Node) -> Optional[ExecutionData]:
+    tmp = tempfile.NamedTemporaryFile(delete=True)
+    tmp.write(escodegen.generate(code.to_dict()))
+
     shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
     os.environ["SHM_ID"] = SHM_ID
 
     try:
         popen = subprocess.Popen(
-            ["./engines/v8/v8/out/fuzzbuild/d8", file], stdout=sys.stdout
+            ["./engines/v8/v8/out/fuzzbuild/d8", tmp.name], stdout=sys.stdout
         )
         popen.wait()
         data = ShmData.from_buffer(shm.buf)
@@ -49,3 +56,4 @@ def execute_test(file: str) -> Optional[ExecutionData]:
     finally:
         shm.close()
         shm.unlink()
+        tmp.close()

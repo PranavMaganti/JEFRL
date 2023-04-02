@@ -1,30 +1,37 @@
 from re import Pattern
 
 import numpy as np
-from attr import has
 
 from nodes.main import (
-    Directive,
+    AssignmentProperty,
     Expression,
+    ExpressionStatement,
+    ImportOrExportDeclaration,
     Node,
+    Property,
+    RestElement,
+    SpreadElement,
     Statement,
     SwitchCase,
     VariableDeclarator,
 )
 
 node_add_types = {
-    "Program": ("body", [Directive, Statement]),
+    "Program": ("body", [Statement, ImportOrExportDeclaration]),
     "Function": ("params", [Pattern]),
     "BlockStatement": ("body", [Statement]),
-    "FunctionBody": ("body", [Directive, Statement]),
+    "FunctionBody": ("body", [ExpressionStatement, Statement]),
     "SwitchStatement": ("cases", [SwitchCase]),
     "SwitchCase": ("consequent", [Statement]),
     "VariableDeclaration": ("declarations", [VariableDeclarator]),
-    "ArrayExpression": ("elements", [Expression]),
-    "ObjectExpression": ("properties", [Expression]),
-    "CallExpression": ("arguments", [Expression]),
-    "NewExpression": ("arguments", [Expression]),
+    "ArrayExpression": ("elements", [Expression, SpreadElement]),
+    "ObjectExpression": ("properties", [Property, SpreadElement]),
+    "CallExpression": ("arguments", [Expression, SpreadElement]),
+    "NewExpression": ("arguments", [Expression, SpreadElement]),
     "SequenceExpression": ("expressions", [Expression]),
+    "TemplateLiteral": ("expressions", [Expression]),
+    "ObjectPattern": ("properties", [AssignmentProperty, RestElement]),
+    "ArrayPattern": ("elements", [Pattern]),
 }
 
 

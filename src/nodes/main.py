@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import abc
+import dataclasses
 import json
+from dataclasses import dataclass, field
 from typing import Any, Generator, Optional, Union
 
 
@@ -12,648 +14,650 @@ class UnknownNodeTypeError(Exception):
     pass
 
 
+estree_field_map = {
+    "isAsync": "async",
+    "awaitAllowed": "await",
+}
+
+
+@dataclass(kw_only=True)
 class Node(abc.ABC):
     """Abstract Node class which defines node operations"""
 
-    node_type: str
-    loc: Optional[dict[str, int]]
+    # loc: Optional[dict[str, int]]
+    parent: Optional[Node] = None
 
-    @property
-    @abc.abstractmethod
-    def fields(self) -> list[str]:  # type: ignore
-        """list of field names associated with this node type, in canonical order."""
-
-    def children(self) -> list[Node]:
-        """list of node children"""
-        return []
-
-    def __init__(self, data: dict[str, Any], parent: Optional[Node]) -> None:
-        """Sets one attribute in the Node for each field (e.g. self.body)."""
-        self.parent = parent
-        self.node_type = data["type"]
-        self.loc = data["loc"] if "loc" in data else None
-
+    def __post_init__(self) -> None:
+        """Set the parent of each child node."""
         for field in self.fields:
-            setattr(self, field, objectify(data.get(field), self))
+            if field == "parent":
+                continue
 
-    def dict(self) -> dict[str, Any]:
-        """Transform the Node back into an Esprima-compatible AST dictionary."""
-        result: dict[str, Any] = {"type": self.node_type}
-        for field in self.fields:
             val = getattr(self, field)
             if isinstance(val, Node):
-                result[field] = val.dict()
-            elif isinstance(val, list):
-                result[field] = [x.dict() for x in val]
-            else:
-                result[field] = val
-        return result
-
-    def traverse(self) -> Generator[Node, None, None]:
-        """Pre-order traversal of this node and all of its children."""
-        yield self
-        for field in self.fields:
-            val = getattr(self, field)
-            if isinstance(val, Node):
-                yield from val.traverse()
+                val.parent = self
             elif isinstance(val, list):
                 for node in val:
-                    yield from node.traverse()
+                    if isinstance(node, Node):
+                        node.parent = self
 
     @property
     def type(self) -> str:
         """The name of the node type, e.g. 'Identifier'."""
         return self.__class__.__name__
 
+    @property
+    def fields(self) -> list[str]:
+        """list of node fields"""
+        return [f.name for f in dataclasses.fields(self) if f.name != "parent"]
+
+    def traverse(self) -> Generator[Node, None, None]:
+        """Pre-order traversal of this node and all of its children."""
+        yield self
+        for field in self.fields:
+            if field == "parent":
+                continue
+            val = getattr(self, field)
+            if isinstance(val, Node):
+                yield from val.traverse()
+            elif isinstance(val, list):
+                for node in val:
+                    if isinstance(node, Node):
+                        yield from node.traverse()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Transform the Node back into an Esprima-compatible AST dictionary."""
+        result: dict[str, Any] = {"type": self.type}
+        for field in self.fields:
+            if field == "parent":
+                continue
+
+            data_field = estree_field_map[field] if field in estree_field_map else field
+
+            val = getattr(self, field)
+            if val is None:
+                continue
+            elif isinstance(val, Node):
+                result[data_field] = val.to_dict()
+            elif isinstance(val, list):
+                result[data_field] = [
+                    x.to_dict() if isinstance(x, Node) else x for x in val
+                ]
+            else:
+                result[data_field] = val
+        return result
+
+    @staticmethod
+    def from_dict(
+        data: Union[None, dict[str, Any], list[dict[str, Any]]]
+    ) -> Union[None, dict[str, Any], list[Any], Node]:
+        """Recursively transform AST data into a Node object."""
+        if not isinstance(data, (dict, list)):
+            # Data is a basic type (None, string, number)
+            return data
+
+        if isinstance(data, dict):
+            if "type" not in data:
+                # Literal values can be empty dictionaries, for example.
+                return data
+            # Transform the type into the appropriate class.
+            node_class = globals().get(data["type"])
+            if not node_class:
+                raise UnknownNodeTypeError(data["type"])
+
+            fields = [
+                f.name for f in dataclasses.fields(node_class) if f.name != "parent"
+            ]
+            params = {}
+
+            for field in fields:
+                data_field = (
+                    estree_field_map[field] if field in estree_field_map else field
+                )
+
+                if data_field not in data:
+                    params[field] = None
+                else:
+                    params[field] = Node.from_dict(data[data_field])
+
+            return node_class(**params)
+        else:
+            # Data is a list of nodes.
+            return [Node.from_dict(x) for x in data]
+
+    def children(self) -> list[Node]:
+        children = []
+
+        for field in self.fields:
+            val = getattr(self, field)
+            if isinstance(val, Node):
+                children.append(val)
+            elif isinstance(val, list):
+                for node in val:
+                    if isinstance(node, Node):
+                        children.append(node)
+
+        return children
+
     def __repr__(self) -> str:
         """String representation of the node."""
-        return json.dumps(self.dict(), indent=4)
+        return json.dumps(self.to_dict(), indent=4)
 
     def __str__(self) -> str:
-        return self.__repr__()
+        return json.dumps(self.to_dict(), indent=4)
+
+    def __getattr__(self, name):
+        return None
+
+    def __dir__(self):
+        return list(self.__dict__.keys())
+
+    def __iter__(self):
+        return self.__iter__
 
 
-def objectify(
-    data: Union[None, dict[str, Any], list[dict[str, Any]]],
-    parent: Optional[Node] = None,
-) -> Union[None, dict[str, Any], list[Any], Node]:
-    """Recursively transform AST data into a Node object."""
-    if not isinstance(data, (dict, list)):
-        # Data is a basic type (None, string, number)
-        return data
-
-    if isinstance(data, dict):
-        if "type" not in data:
-            # Literal values can be empty dictionaries, for example.
-            return data
-        # Transform the type into the appropriate class.
-        node_class = globals().get(data["type"])
-        if not node_class:
-            raise UnknownNodeTypeError(data["type"])
-        return node_class(data, parent)
-    else:
-        # Data is a list of nodes.
-        return [objectify(x, parent) for x in data if x is not None]
-
-
-class Expression(Node):
-    pass
-
-
-class Statement(Node):
-    pass
-
-
+@dataclass
 class Pattern(Node):
     pass
 
 
-# --- AST spec: https://github.com/estree/estree/blob/master/es5.md ---
+@dataclass
+class Expression(Node):
+    pass
+
+
+@dataclass
 class Identifier(Expression, Pattern):
-    @property
-    def fields(self):
-        return ["name"]
+    name: str
 
 
+@dataclass
 class Literal(Expression):
-    @property
-    def fields(self):
-        return ["value"]
+    value: Any
+    raw: str
+    regex: Optional[dict[str, Any]]
+    bigint: Optional[str]
 
 
-class RegExpLiteral(Literal):
-    @property
-    def fields(self):
-        return ["regex"]
-
-
+@dataclass
 class Program(Node):
-    @property
-    def fields(self):
-        return ["body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+    sourceType: str
+    body: list[Union[Statement, ImportOrExportDeclaration]]
 
 
+@dataclass(kw_only=True)
 class Function(Node):
-    @property
-    def fields(self):
-        return ["id", "params", "body"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "id"), getattr(self, "body")] + getattr(self, "params")
+    id: Optional[Identifier] = None
+    params: list[Pattern] = field(default_factory=list)
+    generator: bool
+    isAsync: bool = False
 
 
 # Statements
+@dataclass
+class Statement(Node):
+    pass
+
+
+@dataclass
 class ExpressionStatement(Statement):
-    @property
-    def fields(self):
-        return ["expression"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "expression")]
+    expression: Expression
+    directive: str
 
 
-class Directive(ExpressionStatement):
-    @property
-    def fields(self):
-        return ["expression", "directive"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "expression")]
-
-
+@dataclass
 class BlockStatement(Statement):
-    @property
-    def fields(self):
-        return ["body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+    body: list[Statement] = field(default_factory=list)
 
 
+@dataclass
+class StaticBlock(BlockStatement):
+    pass
+
+
+@dataclass
 class FunctionBody(BlockStatement):
-    @property
-    def fields(self):
-        return ["body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+    body: list[Union[ExpressionStatement, Statement]]
 
 
+@dataclass
 class EmptyStatement(Statement):
-    @property
-    def fields(self):
-        return []
+    pass
 
 
+@dataclass
 class DebuggerStatement(Statement):
-    @property
-    def fields(self):
-        return []
+    pass
 
 
+@dataclass
 class WithStatement(Statement):
-    @property
-    def fields(self):
-        return ["object", "body"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "object"), getattr(self, "body")]
+    object: Expression
+    body: Statement
 
 
 # Control Flow
+@dataclass
 class ReturnStatement(Statement):
-    @property
-    def fields(self):
-        return ["argument"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+    argument: Optional[Expression]
 
 
+@dataclass
 class LabeledStatement(Statement):
-    @property
-    def fields(self):
-        return ["label", "body"]
+    label: Identifier
+    body: Statement
 
 
+@dataclass
 class BreakStatement(Statement):
-    @property
-    def fields(self):
-        return ["label"]
+    label: Optional[Identifier]
 
 
+@dataclass
 class ContinueStatement(Statement):
-    @property
-    def fields(self):
-        return ["label"]
+    label: Optional[Identifier]
 
 
 # Choice
+@dataclass
 class IfStatement(Statement):
-    @property
-    def fields(self):
-        return ["test", "consequent", "alternate"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "test"),
-            getattr(self, "consequent"),
-            getattr(self, "alternate"),
-        ]
+    test: Expression
+    consequent: Statement
+    alternate: Optional[Statement]
 
 
+@dataclass
 class SwitchStatement(Statement):
-    @property
-    def fields(self):
-        return ["discriminant", "cases"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "discriminant")] + getattr(self, "cases")
+    discriminant: Expression
+    cases: list[SwitchCase] = field(default_factory=list)
 
 
+@dataclass
 class SwitchCase(Node):
-    @property
-    def fields(self):
-        return ["test", "consequent"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "test")] + getattr(self, "consequent")
+    test: Optional[Expression]
+    consequent: list[Statement] = field(default_factory=list)
 
 
 # Exceptions
+@dataclass
 class ThrowStatement(Statement):
-    @property
-    def fields(self):
-        return ["argument"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+    argument: Expression
 
 
+@dataclass
 class TryStatement(Statement):
-    @property
-    def fields(self):
-        return ["block", "handler", "finalizer"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "block"),
-            getattr(self, "handler"),
-            getattr(self, "finalizer"),
-        ]
+    block: BlockStatement
+    handler: Optional[CatchClause]
+    finalizer: Optional[BlockStatement]
+    param: Optional[Pattern]
 
 
+@dataclass
 class CatchClause(Node):
-    @property
-    def fields(self):
-        return ["param", "body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+    param: Pattern
+    body: BlockStatement
 
 
 # Loops
+@dataclass
 class WhileStatement(Statement):
-    @property
-    def fields(self):
-        return ["test", "body"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "test"), getattr(self, "body")]
+    test: Expression
+    body: Statement
 
 
+@dataclass
 class DoWhileStatement(Statement):
-    @property
-    def fields(self):
-        return ["body", "test"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "body"), getattr(self, "test")]
+    body: Statement
+    test: Expression
 
 
+@dataclass(kw_only=True)
 class ForStatement(Statement):
-    @property
-    def fields(self):
-        return ["init", "test", "update", "body"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "init"),
-            getattr(self, "test"),
-            getattr(self, "update"),
-            getattr(self, "body"),
-        ]
+    init: Optional[Union[VariableDeclaration, Expression]]
+    test: Optional[Expression]
+    update: Optional[Expression]
+    body: Statement
 
 
+@dataclass
 class ForInStatement(Statement):
-    @property
-    def fields(self):
-        return ["left", "right", "body"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "left"),
-            getattr(self, "right"),
-            getattr(self, "body"),
-        ]
+    left: Union[VariableDeclaration, Pattern]
+    right: Expression
+    body: Statement
 
 
-class ForOfStatement(Node):
-    @property
-    def fields(self):
-        return ["left", "right", "body"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "left"),
-            getattr(self, "right"),
-            getattr(self, "body"),
-        ]
+@dataclass
+class ForOfStatement(ForInStatement):
+    awaitAllowed: bool
 
 
 # Declarations
-class Declaration(Statement):
+@dataclass
+class Declaration(Node):
     pass
 
 
+@dataclass(kw_only=True)
 class FunctionDeclaration(Function, Declaration):
-    @property
-    def fields(self):
-        return ["id"]
+    id: Identifier
+    expression: bool = False
+    body: Union[FunctionBody, Expression]
 
 
+@dataclass(kw_only=True)
 class VariableDeclaration(Declaration):
-    @property
-    def fields(self):
-        return ["declarations"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "declarations")
+    declarations: list[VariableDeclarator] = field(default_factory=list)
+    kind: str
 
 
+@dataclass
 class VariableDeclarator(Node):
-    @property
-    def fields(self):
-        return ["id", "init"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "init")]
+    id: Pattern
+    init: Optional[Expression]
 
 
 # Expressions
+@dataclass
 class ThisExpression(Expression):
-    @property
-    def fields(self):
-        return []
-
-
-class ArrayExpression(Expression):
-    @property
-    def fields(self):
-        return ["elements"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "elements")
-
-
-class ObjectExpression(Expression):
-    @property
-    def fields(self):
-        return ["properties"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "properties")
-
-
-class Property(Node):
-    @property
-    def fields(self):
-        return ["key", "value", "kind"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "key"), getattr(self, "value")]
-
-
-class FunctionExpression(Function, Expression):
     pass
 
 
+@dataclass
+class ArrayExpression(Expression):
+    elements: list[Optional[Union[Expression, SpreadElement]]] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class ObjectExpression(Expression):
+    properties: list[Union[Property, SpreadElement]] = field(default_factory=list)
+
+
+@dataclass
+class Property(Node):
+    key: Expression
+    value: Expression
+    kind: str
+    method: bool
+    shorthand: bool
+    computed: bool
+
+
+@dataclass
+class FunctionExpression(Function, Expression):
+    expression: bool
+    body: Union[FunctionBody, Expression]
+
+
+# Unary operations
+@dataclass
 class UnaryExpression(Expression):
-    @property
-    def fields(self):
-        return ["operator", "prefix", "argument"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+    operator: str
+    prefix: bool
+    argument: Expression
 
 
+@dataclass
 class UpdateExpression(Expression):
-    @property
-    def fields(self):
-        return ["operator", "argument", "prefix"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+    operator: str
+    argument: Expression
+    prefix: bool
 
 
+# Binary operations
+@dataclass
 class BinaryExpression(Expression):
-    @property
-    def fields(self):
-        return ["operator", "left", "right"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "left"), getattr(self, "right")]
+    operator: str
+    left: Union[Expression, PrivateIdentifier]
+    right: Expression
 
 
+@dataclass
 class AssignmentExpression(Expression):
-    @property
-    def fields(self):
-        return ["operator", "left", "right"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "left"), getattr(self, "right")]
+    operator: str
+    left: Pattern
+    right: Expression
 
 
+@dataclass
 class LogicalExpression(Expression):
-    @property
-    def fields(self):
-        return ["operator", "left", "right"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "left"), getattr(self, "right")]
+    operator: str
+    left: Expression
+    right: Expression
 
 
-class MemberExpression(Expression, Pattern):
-    @property
-    def fields(self):
-        return ["object", "property", "computed"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "object"), getattr(self, "property")]
+@dataclass
+class ChainExpression(Expression):
+    expression: Expression
 
 
+@dataclass
+class ChainElement(Node):
+    optional: bool
+
+
+@dataclass
+class MemberExpression(ChainElement):
+    object: Union[Expression, Super]
+    property: Union[Expression, PrivateIdentifier]
+    computed: bool
+
+
+@dataclass
 class ConditionalExpression(Expression):
-    @property
-    def fields(self):
-        return ["test", "consequent", "alternate"]
-
-    def children(self) -> list[Node]:
-        return [
-            getattr(self, "test"),
-            getattr(self, "consequent"),
-            getattr(self, "alternate"),
-        ]
+    test: Expression
+    consequent: Expression
+    alternate: Expression
 
 
-class CallExpression(Expression):
-    @property
-    def fields(self):
-        return ["callee", "arguments"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "callee")] + getattr(self, "arguments")
+@dataclass
+class CallExpression(ChainElement):
+    callee: Union[Expression, Super]
+    arguments: list[Union[Expression, SpreadElement]] = field(default_factory=list)
 
 
+@dataclass
 class NewExpression(Expression):
-    @property
-    def fields(self):
-        return ["callee", "arguments"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "callee")] + getattr(self, "arguments")
+    callee: Expression
+    arguments: list[Union[Expression, SpreadElement]] = field(default_factory=list)
 
 
+@dataclass
 class SequenceExpression(Expression):
-    @property
-    def fields(self):
-        return ["expressions"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "expressions")
+    expressions: list[Expression] = field(default_factory=list)
 
 
+@dataclass
 class Super(Node):
-    @property
-    def fields(self):
-        return []
+    pass
 
 
+@dataclass
 class SpreadElement(Node):
-    @property
-    def fields(self):
-        return ["argument"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+    argument: Expression
 
 
-class ArrowFunctionExpression(Node):
-    @property
-    def fields(self):
-        return ["params", "body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+@dataclass(kw_only=True)
+class ArrowFunctionExpression(Function, Expression):
+    body: Union[FunctionBody, Expression]
+    expression: bool
+    generator: bool = False
 
 
-class YieldExpression(Node):
-    @property
-    def fields(self):
-        return ["argument", "delegate"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
+@dataclass(kw_only=True)
+class YieldExpression(Expression):
+    argument: Optional[Expression]
+    delegate: bool
 
 
-# Classes
-class ClassBody(Node):
-    @property
-    def fields(self):
-        return ["body"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "body")
+@dataclass
+class AwaitExpression(Expression):
+    argument: Expression
 
 
-class ClassDeclaration(Node):
-    @property
-    def fields(self):
-        return ["id", "superClass", "body"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "body")]
-
-
-class MethodDefinition(Node):
-    @property
-    def fields(self):
-        return ["key", "value", "kind"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "key"), getattr(self, "value")]
-
-
-class ClassExpression(Node):
-    @property
-    def fields(self):
-        return ["id", "superClass", "body"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "body")]
-
-
-class MetaProperty(Node):
-    @property
-    def fields(self):
-        return ["meta", "property"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "meta"), getattr(self, "property")]
-
-
-# Patterns
-class ObjectPattern(Node):
-    @property
-    def fields(self):
-        return ["properties"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "properties")
-
-
-class ArrayPattern(Node):
-    @property
-    def fields(self):
-        return ["elements"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "elements")
-
-
-class RestElement(Node):
-    @property
-    def fields(self):
-        return ["argument"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "argument")]
-
-
-class AssignmentPattern(Node):
-    @property
-    def fields(self):
-        return ["left", "right"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "left"), getattr(self, "right")]
+@dataclass
+class ImportExpression(Expression):
+    source: Expression
 
 
 # Template Literals
-class TemplateLiteral(Node):
-    @property
-    def fields(self):
-        return ["quasis", "expressions"]
-
-    def children(self) -> list[Node]:
-        return getattr(self, "quasis") + getattr(self, "expressions")
+@dataclass
+class TemplateLiteral(Expression):
+    quasis: list[TemplateElement] = field(default_factory=list)
+    expressions: list[Expression] = field(default_factory=list)
 
 
-class TaggedTemplateExpression(Node):
-    @property
-    def fields(self):
-        return ["tag", "quasi"]
-
-    def children(self) -> list[Node]:
-        return [getattr(self, "tag"), getattr(self, "quasi")]
+@dataclass
+class TaggedTemplateExpression(Expression):
+    tag: Expression
+    quasi: TemplateLiteral
 
 
+@dataclass
 class TemplateElement(Node):
-    @property
-    def fields(self):
-        return ["value", "tail"]
+    tail: bool
+    value: dict[str, Any]
 
-    def children(self) -> list[Node]:
-        return []
+
+# Patterns
+@dataclass(kw_only=True)
+class AssignmentProperty(Property):
+    value: Pattern
+    kind: str = "init"
+    method: bool = False
+
+
+@dataclass
+class ObjectPattern(Pattern):
+    properties: list[Union[AssignmentProperty, RestElement]] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class ArrayPattern(Pattern):
+    elements: list[Optional[Pattern]] = field(default_factory=list)
+
+
+@dataclass
+class RestElement(Pattern):
+    argument: Pattern
+
+
+@dataclass
+class AssignmentPattern(Pattern):
+    left: Pattern
+    right: Expression
+
+
+# Classes
+@dataclass
+class Class(Node):
+    id: Optional[Identifier]
+    superClass: Optional[Expression]
+    body: ClassBody
+
+
+@dataclass
+class ClassBody(Node):
+    body: list[Union[MethodDefinition, PropertyDefinition, StaticBlock]] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class PrivateIdentifier(Node):
+    name: str
+
+
+@dataclass
+class PropertyDefinition(Node):
+    key: Union[Expression, PrivateIdentifier]
+    value: Optional[Expression]
+    kind: str
+    computed: bool
+    static: bool
+
+
+@dataclass
+class MethodDefinition(Node):
+    key: Union[Expression, PrivateIdentifier]
+    value: FunctionExpression
+    kind: str
+    computed: bool
+    static: bool
+
+
+@dataclass
+class ClassDeclaration(Class, Declaration):
+    id: Identifier
+
+
+@dataclass
+class ClassExpression(Class, Expression):
+    pass
+
+
+@dataclass
+class MetaProperty(Expression):
+    meta: Identifier
+    property: Identifier
+
+
+# Modules
+@dataclass
+class ImportOrExportDeclaration(Node):
+    pass
+
+
+@dataclass
+class ModuleSpecifier(Node):
+    local: Identifier
+
+
+@dataclass(kw_only=True)
+class ImportDeclaration(ImportOrExportDeclaration):
+    specifiers: list[
+        Union[ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier]
+    ] = field(default_factory=list)
+    source: Literal
+
+
+@dataclass
+class ImportSpecifier(ModuleSpecifier):
+    imported: Union[Identifier, Literal]
+
+
+@dataclass
+class ImportDefaultSpecifier(ModuleSpecifier):
+    pass
+
+
+@dataclass
+class ImportNamespaceSpecifier(ModuleSpecifier):
+    pass
+
+
+@dataclass(kw_only=True)
+class ExportNamedDeclaration(ImportOrExportDeclaration):
+    declaration: Optional[Declaration]
+    specifiers: list[ExportSpecifier] = field(default_factory=list)
+    source: Optional[Literal]
+
+
+@dataclass
+class ExportSpecifier(ModuleSpecifier):
+    local: Union[Identifier, Literal]
+    exported: Union[Identifier, Literal]
+
+
+@dataclass
+class ExportDefaultDeclaration(ImportOrExportDeclaration):
+    declaration: Union[FunctionDeclaration, ClassDeclaration, Expression]
+
+
+@dataclass
+class ExportAllDeclaration(ImportOrExportDeclaration):
+    source: Literal
+    exported: Optional[Union[Identifier, Literal]]

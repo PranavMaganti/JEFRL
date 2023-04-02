@@ -15,9 +15,9 @@ def load_corpus(path: str) -> list[Node]:
     for file in tqdm.tqdm(files):
         with open(file, "r") as f:
             code = f.read()
-
         try:
             ast = esprima.parseScript(code, tolerant=True, jsx=True)
+            ast = Node.from_dict(ast.toDict())
         except esprima.error_handler.Error:  # type: ignore
             # logging.warning(f"Failed to parse {file}")
             continue

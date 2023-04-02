@@ -1,12 +1,11 @@
-import collections
+from enum import Enum
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from environment.fuzzing_action import FuzzingAction
-from utils.js_engine import ExecutionData
 from nodes.main import Node
+from utils.js_engine import ExecutionData, execute_test
 from utils.mutation import replace
 
 
@@ -24,7 +23,11 @@ class ProgramState:
         self.current_node = program
 
         self.crash = execution_data.return_code != 0
-        self.coverage = execution_data.hit_edges / execution_data.num_edges
+        self.coverage = (
+            execution_data.hit_edges / execution_data.num_edges
+            if execution_data.num_edges > 0
+            else 0
+        )
 
     def __repr__(self):
         return f"ProgramState(crash={self.crash}, coverage={self.coverage})"
@@ -102,3 +105,7 @@ class FuzzingEnv(gym.Env):
                 new_node = replace(self.subtrees, self._state.current_node)
                 if new_node is not self._state.current_node:
                     self._state.current_node = new_node
+                    return self._get_obs(), 0, False, self._get_info()
+
+                new_exec_data = execute_test(self._state.program)
+                reward = self._get_reward(new_exec_data)
