@@ -23,16 +23,21 @@ class ShmData(ctypes.Structure):
 
 
 class ExecutionData:
-    def __init__(self, return_code, num_edges, hit_edges):
+    def __init__(self, return_code=0, num_edges=0, hit_edges=0):
         self.return_code = return_code
         self.num_edges = num_edges
         self.hit_edges = hit_edges
 
+    def coverage(self):
+        return self.hit_edges / self.num_edges if self.num_edges > 0 else 0
+
+    def is_crash(self):
+        return self.return_code != 0
+
 
 def execute_test(code: Node) -> Optional[ExecutionData]:
     tmp = tempfile.NamedTemporaryFile(delete=True)
-    tmp.write(escodegen.generate(code.to_dict()))
-
+    tmp.write(escodegen.generate(code).encode("utf-8"))
     shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
     os.environ["SHM_ID"] = SHM_ID
 

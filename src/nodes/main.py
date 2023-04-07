@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import abc
+import copy
 import dataclasses
 import json
 from dataclasses import dataclass, field
@@ -18,6 +19,9 @@ estree_field_map = {
     "isAsync": "async",
     "awaitAllowed": "await",
 }
+
+# Set of children fields that should not be children
+non_child_fields = {"id"}
 
 
 @dataclass(kw_only=True)
@@ -129,6 +133,9 @@ class Node(abc.ABC):
         children = []
 
         for field in self.fields:
+            if field in non_child_fields:
+                continue
+
             val = getattr(self, field)
             if isinstance(val, Node):
                 children.append(val)
@@ -155,6 +162,11 @@ class Node(abc.ABC):
     def __iter__(self):
         return self.__iter__
 
+    def __deepcopy__(self, _memo):
+        return self.__class__(
+            **copy.deepcopy({k: v for k, v in self.__dict__.items() if k != "parent"})
+        )
+
 
 @dataclass
 class Pattern(Node):
@@ -175,8 +187,8 @@ class Identifier(Expression, Pattern):
 class Literal(Expression):
     value: Any
     raw: str
-    regex: Optional[dict[str, Any]]
-    bigint: Optional[str]
+    regex: Optional[dict[str, Any]] = None
+    bigint: Optional[str] = None
 
 
 @dataclass
@@ -333,7 +345,7 @@ class ForOfStatement(ForInStatement):
 
 # Declarations
 @dataclass
-class Declaration(Node):
+class Declaration(Statement):
     pass
 
 
@@ -346,7 +358,7 @@ class FunctionDeclaration(Function, Declaration):
 
 @dataclass(kw_only=True)
 class VariableDeclaration(Declaration):
-    declarations: list[VariableDeclarator] = field(default_factory=list)
+    declarations: list[VariableDeclarator]
     kind: str
 
 

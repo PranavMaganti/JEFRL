@@ -29,8 +29,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import re
 import math
+import re
+
 import esutils
 
 
@@ -2640,7 +2641,7 @@ class CodeGeneratorExpression:
         # representation. So if we do so, it breaks the script semantics.
         if type(expr.value) == dict:
             return expr.value["raw"]
-        
+
         return expr.value.raw
 
     def TemplateLiteral(self, expr, precedence, flags):

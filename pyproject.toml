@@ -11,11 +11,14 @@ python = "^3.10"
 esprima = "^4.0.1"
 numpy = "^1.24.2"
 tqdm = "^4.64.1"
+transformers = "^4.27.4"
+torch = "^2.0.0"
 
 
 [tool.poetry.group.dev.dependencies]
 black = {version = "^23.1.0", allow-prereleases = true}
 pytest = "^7.2.1"
+ipykernel = "^6.22.0"
 
 [build-system]
 requires = ["poetry-core"]

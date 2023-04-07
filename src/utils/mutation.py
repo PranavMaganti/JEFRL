@@ -1,3 +1,6 @@
+import copy
+import random
+from hmac import new
 from re import Pattern
 
 import numpy as np
@@ -34,12 +37,14 @@ node_add_types = {
     "ArrayPattern": ("elements", [Pattern]),
 }
 
+non_empty_nodes = {"declarations"}
+
 
 def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     if target.parent is None:
         return target
 
-    new_node = np.random.choice(subtrees[target.type])
+    new_node = copy.deepcopy(random.choice(subtrees[target.type]))
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
@@ -48,10 +53,10 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
             for i, item in enumerate(val):
                 if item is target:
                     val[i] = new_node
-                    return target
+                    return new_node
         elif val is target:
             setattr(target.parent, field, new_node)
-            return target
+            return new_node
 
     raise ValueError("Could not find target in parent")
 
@@ -64,6 +69,9 @@ def remove(target: Node) -> Node:
         val = getattr(target.parent, field)
 
         if isinstance(val, list):
+            if field in non_empty_nodes and len(val) == 1:
+                continue
+
             for i, item in enumerate(val):
                 if item is target:
                     val.pop(i)
@@ -75,25 +83,18 @@ def remove(target: Node) -> Node:
 
 
 def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
-    if target.parent is None or not target.type in node_add_types:
+    if target.type not in node_add_types:
         return target
 
     field, types = node_add_types[target.type]
-    types = types + [t.__subclasses__() for t in types]
+    for t in types:
+        types += t.__subclasses__()
+
     types_name = [t.__name__ for t in types if t.__name__ in subtrees]
     add_type = np.random.choice(types_name)
-    new_node = np.random.choice(subtrees[add_type])
+    new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
 
-    for field in target.parent.fields:
-        val = getattr(target.parent, field)
+    getattr(target, field).append(new_node)
+    new_node.parent = target
 
-        if isinstance(val, list):
-            for i, item in enumerate(val):
-                if item is target:
-                    val.insert(i, new_node)
-                    return target
-        elif val is target:
-            setattr(target.parent, field, new_node)
-            return target
-
-    raise ValueError("Could not find target in parent")
+    return new_node

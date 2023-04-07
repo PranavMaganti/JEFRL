@@ -21,7 +21,9 @@ shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
 os.environ["SHM_ID"] = SHM_ID
 
 try:
-    popen = subprocess.Popen(["./engines/v8/v8/out/fuzzbuild/d8", "test.js"], stdout=sys.stdout)
+    popen = subprocess.Popen(
+        ["./engines/v8/v8/out/fuzzbuild/d8", "test.js"], stdout=sys.stdout
+    )
     popen.wait()
     data = ShmData.from_buffer(shm.buf)
 
@@ -31,8 +33,8 @@ try:
 
     hit_edges = 0
     for i in range(math.ceil(data.num_edges / 8)):
-        hit_edges +=  data.edges[i].bit_count()
-    
+        hit_edges += data.edges[i].bit_count()
+
     print("Hit edges:", hit_edges)
 
     del data
