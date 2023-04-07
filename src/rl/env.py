@@ -5,8 +5,8 @@ from typing import Optional
 import gymnasium as gym
 from gymnasium import spaces
 
-from nodes.main import Node
-from utils import escodegen
+from ast.nodes import Node
+from ast import escodegen
 from utils.js_engine import ExecutionData, execute_test
 from utils.mutation import add, remove, replace
 

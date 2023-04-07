@@ -7,8 +7,8 @@ import tempfile
 from multiprocessing import shared_memory
 from typing import Optional
 
-from nodes.main import Node
-from utils import escodegen
+from ast.nodes import Node
+from ast import escodegen
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8

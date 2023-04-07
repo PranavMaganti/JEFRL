@@ -5,7 +5,7 @@ from re import Pattern
 
 import numpy as np
 
-from nodes.main import (
+from ast.nodes import (
     AssignmentProperty,
     Expression,
     ExpressionStatement,

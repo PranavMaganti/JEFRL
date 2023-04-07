@@ -6,7 +6,7 @@ import torch
 from torch import nn, optim
 from transformers import AutoTokenizer, RobertaConfig, RobertaModel
 
-from environment.main import FuzzingEnv, ProgramState
+from rl.env import FuzzingEnv, ProgramState
 from rl.dqn import DQN, ReplayMemory, Transition
 from utils.js_engine import ExecutionData
 from utils.loader import get_subtrees, load_corpus
@@ -61,9 +61,6 @@ def epsilon_greedy(state, step: int):
             [[env.action_space.sample()]], device=device, dtype=torch.long
         )
 
-
-def dict_cat(ds: list[dict]):
-    return {k: torch.cat([d[k] for d in ds]) for k in ds[0].keys()}
 
 
 def optimise_model(memory: ReplayMemory, device: torch.device):

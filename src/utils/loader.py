@@ -6,7 +6,7 @@ from collections import defaultdict
 import esprima
 import tqdm
 
-from nodes.main import Node
+from ast.nodes import Node
 
 
 def load_corpus(path: str) -> list[Node]:
