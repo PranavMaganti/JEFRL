@@ -1,18 +1,23 @@
+from abc import ABC, abstractmethod
 import ctypes
 import math
 import os
+from pathlib import Path
 import subprocess
 import sys
 import tempfile
 from multiprocessing import shared_memory
 from typing import Optional
 
-from ast.nodes import Node
-from ast import escodegen
+from js_ast.nodes import Node
+from js_ast import escodegen
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
-SHM_ID = "test"
+SHM_ID = "js_rl"
+
+ENGINES_DIR = Path("engines")
+CORPUS_DIR = Path("corpus")
 
 
 class ShmData(ctypes.Structure):
@@ -35,30 +40,63 @@ class ExecutionData:
         return self.return_code != 0
 
 
-def execute_test(code: Node) -> Optional[ExecutionData]:
-    tmp = tempfile.NamedTemporaryFile(delete=True)
-    tmp.write(escodegen.generate(code).encode("utf-8"))
-    shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
-    os.environ["SHM_ID"] = SHM_ID
+class Engine(ABC):
+    def __init__(self) -> None:
+        with open(self.get_corpus_lib(), "r") as f:
+            self.lib = f.read()
 
-    try:
-        popen = subprocess.Popen(
-            ["./engines/v8/v8/out/fuzzbuild/d8", tmp.name], stdout=sys.stdout
-        )
-        popen.wait()
-        data = ShmData.from_buffer(shm.buf)
-        hit_edges = 0
-        for i in range(math.ceil(data.num_edges / 8)):
-            hit_edges += data.edges[i].bit_count()
+    @abstractmethod
+    def get_executable(self) -> str:
+        pass
 
-        exec_data = ExecutionData(popen.returncode, data.num_edges, hit_edges)
+    @abstractmethod
+    def get_corpus(self) -> str:
+        pass
 
-        del data
-        return exec_data
+    @abstractmethod
+    def get_corpus_lib(self) -> str:
+        pass
 
-    except Exception as e:
-        print(e)
-    finally:
-        shm.close()
-        shm.unlink()
-        tmp.close()
+    def execute_test(self, code: Node) -> Optional[ExecutionData]:
+        # Write the code to a temporary file and execute it
+        tmp = tempfile.NamedTemporaryFile(delete=True)
+        tmp.write(self.lib.encode("utf-8"))
+        tmp.write(escodegen.generate(code).encode("utf-8"))
+        tmp.flush()
+
+        shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
+        os.environ["SHM_ID"] = SHM_ID
+
+        try:
+            popen = subprocess.Popen(
+                [self.get_executable(), tmp.name], stdout=sys.stdout
+            )
+            popen.wait()
+            
+            data = ShmData.from_buffer(shm.buf)
+            hit_edges = 0
+            for i in range(math.ceil(data.num_edges / 8)):
+                hit_edges += data.edges[i].bit_count()
+
+            exec_data = ExecutionData(popen.returncode, data.num_edges, hit_edges)
+
+            del data
+            return exec_data
+
+        except Exception as e:
+            print(e)
+        finally:
+            shm.close()
+            shm.unlink()
+            tmp.close()
+
+
+class V8Engine(Engine):
+    def get_executable(self) -> str:
+        return str(ENGINES_DIR / "v8/v8/out/fuzzbuild/d8")
+
+    def get_corpus(self) -> str:
+        return str(CORPUS_DIR / "v8")
+
+    def get_corpus_lib(self) -> str:
+        return str(CORPUS_DIR / "libs/v8.js")

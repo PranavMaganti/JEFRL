@@ -5,7 +5,7 @@ from re import Pattern
 
 import numpy as np
 
-from ast.nodes import (
+from js_ast.nodes import (
     AssignmentProperty,
     Expression,
     ExpressionStatement,
@@ -45,6 +45,7 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
         return target
 
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
+    new_node.parent = target.parent
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)

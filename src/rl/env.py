@@ -1,22 +1,23 @@
 import random
-from enum import Enum
+from enum import IntEnum
 from typing import Optional
 
 import gymnasium as gym
 from gymnasium import spaces
 
-from ast.nodes import Node
-from ast import escodegen
-from utils.js_engine import ExecutionData, execute_test
+from js_ast.nodes import Node
+from js_ast import escodegen
+from utils.js_engine import Engine, ExecutionData
 from utils.mutation import add, remove, replace
 
 
-class FuzzingAction(Enum):
+class FuzzingAction(IntEnum):
     REPLACE = 0
     ADD = 1
     REMOVE = 2
     MOVE_UP = 3
     MOVE_DOWN = 4
+    END = 5
 
 
 class ProgramState:
@@ -44,32 +45,24 @@ class FuzzingEnv(gym.Env):
 
     def __init__(
         self,
-        action_dim: int,
-        observation_dim: int,
         seeds: list[ProgramState],
         subtrees: dict[str, list[Node]],
+        engine: Engine,
         render_mode=None,
     ):
-        self.action_space: spaces.Discrete = spaces.Discrete(action_dim)
-        self.observation_space = spaces.Discrete(observation_dim)
+        self.action_space: spaces.Discrete = spaces.Discrete(len(FuzzingAction))
         self.render_mode = render_mode
 
         self.seeds = seeds
         self.subtrees = subtrees
+        self.engine = engine
+
         self._state: ProgramState
-
-        self._id_to_action = {
-            0: FuzzingAction.REPLACE,
-            1: FuzzingAction.ADD,
-            2: FuzzingAction.REMOVE,
-            3: FuzzingAction.MOVE_UP,
-            4: FuzzingAction.MOVE_DOWN,
-        }
-
         self.steps_since_increased_coverage = 0
 
-    def _get_obs(self) -> Optional[str]:
-        return self._state.get_current_code()
+    def _get_obs(self) -> str:
+        obs = self._state.get_current_code()
+        return obs if obs else ""
 
     def _get_info(self):
         return {}
@@ -102,7 +95,7 @@ class FuzzingEnv(gym.Env):
         super().reset(seed=seed)
 
         # Choose the agent's location uniformly at random
-        self._state = self.np_random.choice(self.seeds)
+        self._state = random.choice(self.seeds)
 
         observation = self._get_obs()
         info = self._get_info()
@@ -111,23 +104,22 @@ class FuzzingEnv(gym.Env):
 
     def step(self, action: int):
         print(f"Steps since increased coverage: {self.steps_since_increased_coverage}")
-        fuzzing_action = self._id_to_action[action]
         new_node = self._state.current_node
 
-        match fuzzing_action:
+        match action:
             case FuzzingAction.MOVE_UP:
                 if self._state.current_node.parent is not None:
                     self._state.current_node = self._state.current_node.parent
 
                 return self._get_obs(), 0, self._get_done(), self._get_info()
-
             case FuzzingAction.MOVE_DOWN:
                 children = self._state.current_node.children()
                 if children:
                     self._state.current_node = random.choice(children)
 
                 return self._get_obs(), 0, self._get_done(), self._get_info()
-
+            case FuzzingAction.END:
+                return self._get_obs(), 0, True, self._get_info()
             case FuzzingAction.REPLACE:
                 new_node = replace(self.subtrees, self._state.current_node)
             case FuzzingAction.ADD:
@@ -139,7 +131,7 @@ class FuzzingEnv(gym.Env):
             return self._get_obs(), 0, self._get_done(), self._get_info()
 
         self._state.current_node = new_node
-        exec_data = execute_test(self._state.program)
+        exec_data = self.engine.execute_test(self._state.program)
         if not exec_data:
             return self._get_obs(), 0, True, self._get_info()
 

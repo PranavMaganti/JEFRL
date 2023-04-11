@@ -1,5 +1,5 @@
 #  Test that the function correctly replaces a node with a subtree
-from ast.nodes import (
+from js_ast.nodes import (
     BinaryExpression,
     BlockStatement,
     Expression,

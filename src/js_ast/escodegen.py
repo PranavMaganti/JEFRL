@@ -1021,7 +1021,7 @@ def generateInternal(node):
     raise Exception("Unknown node type: " + node.type)
 
 
-def generate(node, options=None):
+def generate(node, options=None) -> str:
     global base, indent, json, renumber, hexadecimal, quotes, escapeless, newline
     global space, parentheses, semicolons, safeConcatenation, directive
     global parse, sourceMap, sourceCode, preserveBlankLines, extra, SourceNode
