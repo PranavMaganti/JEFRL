@@ -18,6 +18,7 @@ from js_ast.nodes import (
     SwitchCase,
     VariableDeclarator,
 )
+from utils.analysis import fix_node, live_variable_analysis
 
 node_add_types = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
@@ -38,6 +39,13 @@ node_add_types = {
 }
 
 non_empty_nodes = {"declarations"}
+non_add_types = {
+    "ReturnStatement",
+    "ThrowStatement",
+    "BreakStatement",
+    "ContinueStatement",
+    "YieldExpression",
+}
 
 
 def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
@@ -46,6 +54,9 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
 
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
+
+    live_variable_analysis(new_node, target.scope)
+    fix_node(new_node)
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
@@ -91,11 +102,19 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
     for t in types:
         types += t.__subclasses__()
 
-    types_name = [t.__name__ for t in types if t.__name__ in subtrees]
+    types_name = [
+        t.__name__
+        for t in types
+        if t.__name__ in subtrees and t.__name__ not in non_add_types
+    ]
     add_type = np.random.choice(types_name)
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
+    list_nodes = getattr(target, field)
+    scope = target.end_scope if hasattr(target, "end_scope") else target.scope
+    live_variable_analysis(new_node, scope)
+    fix_node(new_node)
 
-    getattr(target, field).append(new_node)
+    list_nodes.append(new_node)
     new_node.parent = target
 
     return new_node

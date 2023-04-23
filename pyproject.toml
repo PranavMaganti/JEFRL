@@ -13,6 +13,7 @@ numpy = "^1.24.2"
 tqdm = "^4.64.1"
 transformers = "^4.27.4"
 torch = "^2.0.0"
+strenum = "^0.4.10"
 
 
 [tool.poetry.group.dev.dependencies]

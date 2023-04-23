@@ -8,6 +8,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Generator, Optional, Union
 
+from js_ast.scope import Scope
+
 
 class UnknownNodeTypeError(Exception):
     """Raised if we encounter a node with an unknown type."""
@@ -20,6 +22,8 @@ estree_field_map = {
     "awaitAllowed": "await",
 }
 
+context_fields = {"parent", "scope"}
+
 # Set of children fields that should not be children
 non_child_fields = {"id"}
 
@@ -30,13 +34,12 @@ class Node(abc.ABC):
 
     # loc: Optional[dict[str, int]]
     parent: Optional[Node] = None
+    scope: Optional[Scope] = None
+    end_scope: Optional[Scope] = None
 
     def __post_init__(self) -> None:
         """Set the parent of each child node."""
         for field in self.fields:
-            if field == "parent":
-                continue
-
             val = getattr(self, field)
             if isinstance(val, Node):
                 val.parent = self
@@ -44,6 +47,9 @@ class Node(abc.ABC):
                 for node in val:
                     if isinstance(node, Node):
                         node.parent = self
+
+    def set_scope(self, scope: Scope):
+        self.scope = scope
 
     @property
     def type(self) -> str:
@@ -53,14 +59,14 @@ class Node(abc.ABC):
     @property
     def fields(self) -> list[str]:
         """list of node fields"""
-        return [f.name for f in dataclasses.fields(self) if f.name != "parent"]
+        return [
+            f.name for f in dataclasses.fields(self) if f.name not in context_fields
+        ]
 
     def traverse(self) -> Generator[Node, None, None]:
         """Pre-order traversal of this node and all of its children."""
         yield self
         for field in self.fields:
-            if field == "parent":
-                continue
             val = getattr(self, field)
             if isinstance(val, Node):
                 yield from val.traverse()
@@ -73,21 +79,16 @@ class Node(abc.ABC):
         """Transform the Node back into an Esprima-compatible AST dictionary."""
         result: dict[str, Any] = {"type": self.type}
         for field in self.fields:
-            if field == "parent":
-                continue
-
             data_field = estree_field_map[field] if field in estree_field_map else field
 
             val = getattr(self, field)
-            if val is None:
-                continue
-            elif isinstance(val, Node):
+            if isinstance(val, Node):
                 result[data_field] = val.to_dict()
             elif isinstance(val, list):
                 result[data_field] = [
                     x.to_dict() if isinstance(x, Node) else x for x in val
                 ]
-            else:
+            elif val is not None:
                 result[data_field] = val
         return result
 
@@ -110,7 +111,9 @@ class Node(abc.ABC):
                 raise UnknownNodeTypeError(data["type"])
 
             fields = [
-                f.name for f in dataclasses.fields(node_class) if f.name != "parent"
+                f.name
+                for f in dataclasses.fields(node_class)
+                if f.name not in context_fields
             ]
             params = {}
 

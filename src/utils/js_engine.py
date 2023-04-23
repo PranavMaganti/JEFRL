@@ -1,16 +1,20 @@
-from abc import ABC, abstractmethod
+from __future__ import annotations
+
 import ctypes
 import math
 import os
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from abc import ABC, abstractmethod
 from multiprocessing import shared_memory
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional
 
-from js_ast.nodes import Node
+from strenum import StrEnum
+
 from js_ast import escodegen
+from js_ast.nodes import Node
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
@@ -20,6 +24,13 @@ ENGINES_DIR = Path("engines")
 CORPUS_DIR = Path("corpus")
 
 
+class JSError(StrEnum):
+    ReferenceError = "ReferenceError"
+    SyntaxError = "SyntaxError"
+    TypeError = "TypeError"
+    Crash = "Crash"
+
+
 class ShmData(ctypes.Structure):
     _fields_ = [
         ("num_edges", ctypes.c_uint32),
@@ -27,14 +38,42 @@ class ShmData(ctypes.Structure):
     ]
 
 
-class ExecutionData:
-    def __init__(self, return_code=0, num_edges=0, hit_edges=0):
-        self.return_code = return_code
+class CoverageData:
+    def __init__(self, num_edges: int = 0, edges: bytearray = bytearray()):
         self.num_edges = num_edges
-        self.hit_edges = hit_edges
+        self.edges = edges
+        self.hit_edges = 0
+
+        for i in range(math.ceil(self.num_edges / 8)):
+            self.hit_edges += self.edges[i].bit_count()
 
     def coverage(self):
         return self.hit_edges / self.num_edges if self.num_edges > 0 else 0
+
+    def __or__(self, __value: Any) -> CoverageData:
+        if not isinstance(__value, CoverageData):
+            raise TypeError(
+                "Cannot perform bitwise or on CoverageData and " + type(__value)
+            )
+        elif self.num_edges == 0 and __value.num_edges != 0:
+            return __value
+        elif self.num_edges != 0 and __value.num_edges == 0:
+            return self
+        elif self.num_edges != __value.num_edges:
+            raise ValueError(
+                "Cannot perform bitwise or on CoverageData with different number of edges"
+            )
+
+        return CoverageData(
+            self.num_edges,
+            bytearray([a | b for a, b in zip(self.edges, __value.edges)]),
+        )
+
+
+class ExecutionData:
+    def __init__(self, return_code, coverage_data: CoverageData):
+        self.return_code = return_code
+        self.coverage_data = coverage_data
 
     def is_crash(self):
         return self.return_code != 0
@@ -57,7 +96,7 @@ class Engine(ABC):
     def get_corpus_lib(self) -> str:
         pass
 
-    def execute_test(self, code: Node) -> Optional[ExecutionData]:
+    def execute(self, code: Node) -> Optional[ExecutionData]:
         # Write the code to a temporary file and execute it
         tmp = tempfile.NamedTemporaryFile(delete=True)
         tmp.write(self.lib.encode("utf-8"))
@@ -72,19 +111,25 @@ class Engine(ABC):
                 [self.get_executable(), tmp.name], stdout=sys.stdout
             )
             popen.wait()
-            
-            data = ShmData.from_buffer(shm.buf)
-            hit_edges = 0
-            for i in range(math.ceil(data.num_edges / 8)):
-                hit_edges += data.edges[i].bit_count()
 
-            exec_data = ExecutionData(popen.returncode, data.num_edges, hit_edges)
+            data = ShmData.from_buffer(shm.buf)
+            exec_data = ExecutionData(
+                popen.returncode,
+                CoverageData(int(data.num_edges), bytearray(data.edges)),
+            )
 
             del data
             return exec_data
 
-        except Exception as e:
-            print(e)
+        except subprocess.CalledProcessError as e:
+            data = ShmData.from_buffer(shm.buf)
+            exec_data = ExecutionData(
+                e.returncode,
+                CoverageData(int(data.num_edges), bytearray(data.edges)),
+            )
+
+            del data
+            return exec_data
         finally:
             shm.close()
             shm.unlink()
