@@ -403,7 +403,7 @@ def to_base(n, _base):
     while n:
         r = n % _base
         n //= _base
-        result += r * 10**counter
+        result += r * 10 ** counter
         counter += 1
     return str(result)
 

@@ -5,10 +5,10 @@ from typing import Optional
 import gymnasium as gym
 from gymnasium import spaces
 
-from js_ast.nodes import Node
 from js_ast import escodegen
+from js_ast.mutation import add, remove, replace
+from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
-from utils.mutation import add, remove, replace
 
 
 class FuzzingAction(IntEnum):

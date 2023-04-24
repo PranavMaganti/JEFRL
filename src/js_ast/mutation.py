@@ -4,7 +4,9 @@ from hmac import new
 from re import Pattern
 
 import numpy as np
+from torch import le
 
+from js_ast.analysis import fix_node_references, scope_analysis
 from js_ast.nodes import (
     AssignmentProperty,
     Expression,
@@ -18,7 +20,6 @@ from js_ast.nodes import (
     SwitchCase,
     VariableDeclarator,
 )
-from utils.analysis import fix_node, live_variable_analysis
 
 node_add_types = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
@@ -55,15 +56,15 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
 
-    live_variable_analysis(new_node, target.scope)
-    fix_node(new_node)
+    scope_analysis(new_node, target.scope)
+    fix_node_references(new_node)
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
 
         if isinstance(val, list):
             for i, item in enumerate(val):
-                if item is target:
+                if item == target:
                     val[i] = new_node
                     return new_node
         elif val is target:
@@ -81,15 +82,20 @@ def remove(target: Node) -> Node:
         val = getattr(target.parent, field)
 
         if isinstance(val, list):
-            if field in non_empty_nodes and len(val) == 1:
-                continue
-
             for i, item in enumerate(val):
-                if item is target:
+                if item == target:
+                    if field in non_empty_nodes and len(val) == 1:
+                        return target
+
                     val.pop(i)
+
+                    # Re-analyze the scope of the parent as it may have changed
+                    scope_analysis(target.parent, target.parent.scope)
                     return target.parent
-        elif val is target:
+        elif val == target:
             return target
+
+    print("Could not find target in parent", target, target.parent)
 
     raise ValueError("Could not find target in parent")
 
@@ -109,10 +115,12 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
     ]
     add_type = np.random.choice(types_name)
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
+
     list_nodes = getattr(target, field)
-    scope = target.end_scope if hasattr(target, "end_scope") else target.scope
-    live_variable_analysis(new_node, scope)
-    fix_node(new_node)
+    scope = target.end_scope if target.end_scope else target.scope
+
+    scope_analysis(new_node, scope)
+    fix_node_references(new_node)
 
     list_nodes.append(new_node)
     new_node.parent = target

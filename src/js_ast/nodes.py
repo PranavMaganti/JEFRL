@@ -48,9 +48,6 @@ class Node(abc.ABC):
                     if isinstance(node, Node):
                         node.parent = self
 
-    def set_scope(self, scope: Scope):
-        self.scope = scope
-
     @property
     def type(self) -> str:
         """The name of the node type, e.g. 'Identifier'."""
