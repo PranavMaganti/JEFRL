@@ -1,7 +1,9 @@
 from functools import reduce
 import logging
+from pathlib import Path
 import random
 from enum import IntEnum
+import time
 from typing import Optional
 
 import gymnasium as gym
@@ -13,6 +15,8 @@ from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
 
 from functools import reduce
+
+INTERESTING_FOLDER = Path("corpus/interesting")
 
 
 class FuzzingAction(IntEnum):
@@ -68,6 +72,10 @@ class FuzzingEnv(gym.Env):
             lambda x, y: x | y.coverage_data, corpus, CoverageData()
         )
 
+    def save_current_state(self, path: Path):
+        with open(path, "w") as f:
+            f.write(self._state.code)
+
     def _get_obs(self) -> str:
         obs = self._state.code
         return obs if obs else ""
@@ -76,7 +84,9 @@ class FuzzingEnv(gym.Env):
         return {}
 
     def _get_reward(self, exec_data: ExecutionData):
-        if exec_data.is_crash() != 0:
+        if exec_data.is_crash():
+            print(f"Crash detected: {exec_data.out}")
+            self.save_current_state(INTERESTING_FOLDER / f"{time.time()}_crash.js")
             self.steps_since_increased_coverage = 0
             return 10
 
@@ -88,6 +98,8 @@ class FuzzingEnv(gym.Env):
 
         # new coverage has increased total coverage
         print(f"Coverage increased from {self.current_coverage} to {new_coverage}")
+        self.save_current_state(INTERESTING_FOLDER / f"{time.time()}.js")
+        self.corpus.append(self._state)
         self.current_coverage = new_coverage
         self.steps_since_increased_coverage = 0
 
@@ -105,6 +117,8 @@ class FuzzingEnv(gym.Env):
         # Choose the agent's location uniformly at random
         self._state = random.choice(self.corpus)
         self.steps_since_increased_coverage = 0
+
+        print("Starting new episode")
 
         observation = self._get_obs()
         info = self._get_info()
