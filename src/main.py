@@ -13,15 +13,14 @@ from utils.loader import get_subtrees, load_corpus
 
 # Environment setup
 engine = V8Engine()
-corpus = load_corpus(engine.get_corpus())
+corpus = load_corpus(engine)
 subtrees = get_subtrees(corpus)
-seeds = []
-# TODO: Check deepcopy issues
-for ast in corpus:
-    scope_analysis(ast)
-    seeds.append(ProgramState(ast))
 
-env = FuzzingEnv(seeds, subtrees, engine)
+# TODO: Check deepcopy issues
+for state in corpus:
+    scope_analysis(state.current_node)
+
+env = FuzzingEnv(corpus, subtrees, engine)
 
 
 LR = 1e-4  # Learning rate of the AdamW optimizer

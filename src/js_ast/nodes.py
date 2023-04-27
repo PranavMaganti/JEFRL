@@ -167,6 +167,12 @@ class Node(abc.ABC):
             **copy.deepcopy({k: v for k, v in self.__dict__.items() if k != "parent"})
         )
 
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+
 
 @dataclass
 class Pattern(Node):

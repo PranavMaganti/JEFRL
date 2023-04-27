@@ -28,7 +28,8 @@ class JSError(StrEnum):
     ReferenceError = "ReferenceError"
     SyntaxError = "SyntaxError"
     TypeError = "TypeError"
-    Crash = "Crash"
+    Other = "Other"
+    NoError = "NoError"
 
 
 class ShmData(ctypes.Structure):
@@ -69,14 +70,24 @@ class CoverageData:
             bytearray([a | b for a, b in zip(self.edges, __value.edges)]),
         )
 
+    def __str__(self) -> str:
+        return f"CoverageData({self.coverage()})"
+
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, CoverageData):
+            return False
+
+        return self.edges == __value.edges and self.num_edges == __value.num_edges
+
 
 class ExecutionData:
-    def __init__(self, return_code, coverage_data: CoverageData):
-        self.return_code = return_code
+    def __init__(self, coverage_data: CoverageData, error: JSError, out: str):
+        self.error = error
         self.coverage_data = coverage_data
+        self.out = out
 
     def is_crash(self):
-        return self.return_code != 0
+        return self.error == JSError.Other
 
 
 class Engine(ABC):
@@ -96,52 +107,52 @@ class Engine(ABC):
     def get_corpus_lib(self) -> str:
         pass
 
-    def execute(self, code: Node) -> Optional[ExecutionData]:
-        # Write the code to a temporary file and execute it
+    def execute_text(self, code: str) -> Optional[ExecutionData]:
         tmp = tempfile.NamedTemporaryFile(delete=True)
         tmp.write(self.lib.encode("utf-8"))
-        tmp.write(escodegen.generate(code).encode("utf-8"))
+        tmp.write(code.encode("utf-8"))
         tmp.flush()
 
+        return self.execute_file(tmp.name)
+
+    def execute_file(self, file: str):
         shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
         os.environ["SHM_ID"] = SHM_ID
 
-        try:
-            popen = subprocess.Popen(
-                [self.get_executable(), tmp.name], stdout=sys.stdout
-            )
-            popen.wait()
+        res = subprocess.run(
+            [self.get_executable(), file], capture_output=True, check=False
+        )
 
-            data = ShmData.from_buffer(shm.buf)
-            exec_data = ExecutionData(
-                popen.returncode,
-                CoverageData(int(data.num_edges), bytearray(data.edges)),
-            )
+        out = res.stdout.decode("utf-8")
+        error = JSError.NoError
+        if "ReferenceError" in out:
+            error = JSError.ReferenceError
+        elif "SyntaxError" in out:
+            error = JSError.SyntaxError
+        elif "TypeError" in out:
+            error = JSError.TypeError
+        elif res.returncode != 0:
+            error = JSError.Other
 
-            del data
-            return exec_data
+        data = ShmData.from_buffer(shm.buf)
+        exec_data = ExecutionData(
+            CoverageData(int(data.num_edges), bytearray(data.edges)), error, out
+        )
 
-        except subprocess.CalledProcessError as e:
-            data = ShmData.from_buffer(shm.buf)
-            exec_data = ExecutionData(
-                e.returncode,
-                CoverageData(int(data.num_edges), bytearray(data.edges)),
-            )
+        del data
 
-            del data
-            return exec_data
-        finally:
-            shm.close()
-            shm.unlink()
-            tmp.close()
+        shm.close()
+        shm.unlink()
+
+        return exec_data
 
 
 class V8Engine(Engine):
-    def get_executable(self) -> str:
-        return str(ENGINES_DIR / "v8/v8/out/fuzzbuild/d8")
+    def get_executable(self) -> Path:
+        return ENGINES_DIR / "v8/v8/out/fuzzbuild/d8"
 
-    def get_corpus(self) -> str:
-        return str(CORPUS_DIR / "v8")
+    def get_corpus(self) -> Path:
+        return CORPUS_DIR / "v8"
 
-    def get_corpus_lib(self) -> str:
-        return str(CORPUS_DIR / "libs/v8.js")
+    def get_corpus_lib(self) -> Path:
+        return CORPUS_DIR / "libs/v8.js"

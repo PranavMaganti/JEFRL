@@ -1,3 +1,5 @@
+from functools import reduce
+import logging
 import random
 from enum import IntEnum
 from typing import Optional
@@ -10,6 +12,8 @@ from js_ast.mutation import add, remove, replace
 from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
 
+from functools import reduce
+
 
 class FuzzingAction(IntEnum):
     REPLACE = 0
@@ -21,16 +25,21 @@ class FuzzingAction(IntEnum):
 
 
 class ProgramState:
-    def __init__(self, program: Node):
+    def __init__(self, program: Node, coverage_data: CoverageData):
         self.program = program
-        self.current_node = program
+        self.coverage_data = coverage_data
+        self.set_current_node(program)
 
-    def get_current_code(self) -> Optional[str]:
+    def set_current_node(self, node: Node):
+        self.current_node = node
+        self.code = self.generate_code()
+
+    def generate_code(self) -> str:
         try:
             return escodegen.generate(self.current_node)  # type: ignore
         except Exception:
-            print("Error generating code")
-            return None
+            logging.error("Error generating code")
+            return ""
 
     def __str__(self):
         return self.__repr__()
@@ -55,10 +64,12 @@ class FuzzingEnv(gym.Env):
 
         self._state: ProgramState
         self.steps_since_increased_coverage = 0
-        self.current_coverage = CoverageData()
+        self.current_coverage = reduce(
+            lambda x, y: x | y.coverage_data, corpus, CoverageData()
+        )
 
     def _get_obs(self) -> str:
-        obs = self._state.get_current_code()
+        obs = self._state.code
         return obs if obs else ""
 
     def _get_info(self):
@@ -76,7 +87,7 @@ class FuzzingEnv(gym.Env):
             return 0
 
         # new coverage has increased total coverage
-        print(f"New coverage - Total: {new_coverage.coverage()}")
+        print(f"Coverage increased from {self.current_coverage} to {new_coverage}")
         self.current_coverage = new_coverage
         self.steps_since_increased_coverage = 0
 
@@ -134,10 +145,11 @@ class FuzzingEnv(gym.Env):
             return self._get_obs(), 0, self._get_done(), self._get_info()
 
         self._state.current_node = new_node
-        exec_data = self.engine.execute(self._state.program)
+        exec_data = self.engine.execute_text(self._state.code)
         if not exec_data:
             return self._get_obs(), 0, True, self._get_info()
 
+        self._state.coverage_data = exec_data.coverage_data
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
 
