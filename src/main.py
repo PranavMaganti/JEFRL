@@ -6,7 +6,7 @@ from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
 from js_ast.analysis import scope_analysis
 from rl.dqn import DQN, ReplayMemory
-from rl.env import FuzzingEnv, ProgramState
+from rl.env import FuzzingEnv
 from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.loader import get_subtrees, load_corpus
@@ -16,7 +16,6 @@ engine = V8Engine()
 corpus = load_corpus(engine)
 subtrees = get_subtrees(corpus)
 
-# TODO: Check deepcopy issues
 for state in corpus:
     scope_analysis(state.current_node)
 

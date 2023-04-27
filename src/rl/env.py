@@ -1,9 +1,9 @@
-from functools import reduce
 import logging
-from pathlib import Path
 import random
-from enum import IntEnum
 import time
+from enum import IntEnum
+from functools import reduce
+from pathlib import Path
 from typing import Optional
 
 import gymnasium as gym
@@ -13,8 +13,6 @@ from js_ast import escodegen
 from js_ast.mutation import add, remove, replace
 from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
-
-from functools import reduce
 
 INTERESTING_FOLDER = Path("corpus/interesting")
 

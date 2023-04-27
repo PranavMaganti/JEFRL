@@ -1,12 +1,13 @@
 import copy
 import glob
 import logging
-from collections import defaultdict
 import pickle
+from collections import defaultdict
+from pathlib import Path
 
 import esprima
 import tqdm
-from pathlib import Path
+
 from js_ast.nodes import Node
 from rl.env import ProgramState
 from utils.js_engine import Engine, JSError
