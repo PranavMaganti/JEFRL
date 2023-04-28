@@ -23,7 +23,7 @@ env = FuzzingEnv(corpus, subtrees, engine)
 
 
 LR = 1e-4  # Learning rate of the AdamW optimizer
-NUM_EPISODES = 1000  # Number of episodes to train the agent for
+NUM_EPISODES = 10000  # Number of episodes to train the agent for
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

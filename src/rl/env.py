@@ -30,15 +30,18 @@ class ProgramState:
     def __init__(self, program: Node, coverage_data: CoverageData):
         self.program = program
         self.coverage_data = coverage_data
-        self.set_current_node(program)
+        self.current_node = program
 
-    def set_current_node(self, node: Node):
-        self.current_node = node
-        self.code = self.generate_code()
-
-    def generate_code(self) -> str:
+    def generate_node_code(self) -> str:
         try:
             return escodegen.generate(self.current_node)  # type: ignore
+        except Exception:
+            logging.error("Error generating code")
+            return ""
+
+    def generate_program_code(self) -> str:
+        try:
+            return escodegen.generate(self.program)  # type: ignore
         except Exception:
             logging.error("Error generating code")
             return ""
@@ -72,10 +75,10 @@ class FuzzingEnv(gym.Env):
 
     def save_current_state(self, path: Path):
         with open(path, "w") as f:
-            f.write(self._state.code)
+            f.write(self._state.generate_program_code())
 
     def _get_obs(self) -> str:
-        obs = self._state.code
+        obs = self._state.generate_node_code()
         return obs if obs else ""
 
     def _get_info(self):
@@ -132,9 +135,10 @@ class FuzzingEnv(gym.Env):
 
         match action:
             case FuzzingAction.MOVE_UP:
-                if self._state.current_node.parent is not None:
-                    self._state.current_node = self._state.current_node.parent
+                if self._state.current_node.parent is None:
+                    return self._get_obs(), -1, self._get_done(), self._get_info()
 
+                self._state.current_node = self._state.current_node.parent
                 return self._get_obs(), 0, self._get_done(), self._get_info()
 
             case FuzzingAction.MOVE_DOWN:
@@ -157,7 +161,7 @@ class FuzzingEnv(gym.Env):
             return self._get_obs(), 0, self._get_done(), self._get_info()
 
         self._state.current_node = new_node
-        exec_data = self.engine.execute_text(self._state.code)
+        exec_data = self.engine.execute_text(self._state.generate_program_code())
         if not exec_data:
             return self._get_obs(), 0, True, self._get_info()
 

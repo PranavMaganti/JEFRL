@@ -4,7 +4,6 @@ import ctypes
 import math
 import os
 import subprocess
-import sys
 import tempfile
 from abc import ABC, abstractmethod
 from multiprocessing import shared_memory
@@ -12,9 +11,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 from strenum import StrEnum
-
-from js_ast import escodegen
-from js_ast.nodes import Node
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8

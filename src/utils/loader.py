@@ -1,5 +1,6 @@
 import copy
 import glob
+from hmac import new
 import logging
 import pickle
 from collections import defaultdict
@@ -8,7 +9,7 @@ from pathlib import Path
 import esprima
 import tqdm
 
-from js_ast.nodes import Node
+from js_ast.nodes import Node, UnknownNodeTypeError
 from rl.env import ProgramState
 from utils.js_engine import Engine, JSError
 
@@ -40,7 +41,8 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
         try:
             ast = esprima.parseScript(code, tolerant=True, jsx=True)
             ast = Node.from_dict(ast.toDict())
-        except esprima.error_handler.Error:  # type: ignore
+            sanitise_ast(ast)
+        except (esprima.error_handler.Error, UnknownNodeTypeError):  # type: ignore
             # logging.warning(f"Failed to parse {file}")
             continue
 
@@ -59,3 +61,25 @@ def get_subtrees(corpus: list[ProgramState]) -> dict[str, list[Node]]:
                 subtrees[node.type].append(copy.deepcopy(node))
 
     return subtrees
+
+
+def sanitise_ast(ast: Node):
+    for node in ast.traverse():
+        for field in node.fields:
+            val = getattr(node, field)
+            if isinstance(val, list):
+                new_body = []
+                for v in val:
+                    if (
+                        isinstance(v, Node)
+                        and v.type == "ExpressionStatement"
+                        and v.expression.type == "CallExpression"
+                        and v.expression.callee.name
+                        and "assert" in v.expression.callee.name
+                        # and "assert" in v.expression.callee.name
+                    ):
+                        continue
+
+                    new_body.append(v)
+
+                setattr(node, field, new_body)
