@@ -9,7 +9,7 @@ from js_ast.nodes import (
 )
 
 
-def test_live_variable_analysis_vars():
+def test_scope_analysis_vars():
     # Create a new program node
     program_node = Program(
         body=[
@@ -32,7 +32,7 @@ def test_live_variable_analysis_vars():
     assert "x" in program_node.end_scope.available_variables()
 
 
-def test_live_variable_analysis_funcs():
+def test_scope_analysis_funcs():
     program_node = Program(
         body=[
             FunctionDeclaration(

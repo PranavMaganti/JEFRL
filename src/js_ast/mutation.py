@@ -117,12 +117,13 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
 
     list_nodes = getattr(target, field)
+
     scope = target.end_scope if target.end_scope else target.scope
+    new_node.parent = target
 
     scope_analysis(new_node, scope)
     fix_node_references(new_node)
 
     list_nodes.append(new_node)
-    new_node.parent = target
 
     return new_node

@@ -5,6 +5,7 @@ import abc
 import copy
 import dataclasses
 import json
+from ast import Tuple
 from dataclasses import dataclass, field
 from typing import Any, Generator, Optional, Union
 
@@ -164,7 +165,13 @@ class Node(abc.ABC):
 
     def __deepcopy__(self, _memo):
         return self.__class__(
-            **copy.deepcopy({k: v for k, v in self.__dict__.items() if k != "parent"})
+            **copy.deepcopy(
+                {
+                    k: v
+                    for k, v in self.__dict__.items()
+                    if k not in {"parent", "scope", "end_scope"}
+                }
+            )
         )
 
     def __getstate__(self):

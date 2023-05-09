@@ -1,6 +1,8 @@
+import sys
 from itertools import count
 
 import torch
+import tqdm
 from torch import optim
 from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
 
@@ -11,12 +13,14 @@ from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.loader import get_subtrees, load_corpus
 
+# sys.setrecursionlimit(10000)  # default is 1000 in my installation
+
 # Environment setup
 engine = V8Engine()
 corpus = load_corpus(engine)
 subtrees = get_subtrees(corpus)
 
-for state in corpus:
+for state in tqdm.tqdm(corpus):
     scope_analysis(state.current_node)
 
 env = FuzzingEnv(corpus, subtrees, engine)

@@ -58,7 +58,7 @@ def get_subtrees(corpus: list[ProgramState]) -> dict[str, list[Node]]:
     for state in corpus:
         for node in state.current_node.traverse():
             if hasattr(node, "type"):
-                subtrees[node.type].append(copy.deepcopy(node))
+                subtrees[node.type].append(node)
 
     return subtrees
 

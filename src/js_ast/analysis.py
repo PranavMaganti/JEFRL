@@ -1,17 +1,21 @@
+import copy
 import random
+import re
+
+from torch import rand
 
 from js_ast.nodes import Identifier, Literal, Node
 from js_ast.scope import Scope, ScopeType
+from utils.interesting_values import interesting_floats, interesting_integers
 
 
 # Calculates variables, classes and functions available at each node and stores it in
 # a node attribute
 def scope_analysis(node: Node, scope: Scope = Scope()):
-    node.scope = Scope(
-        scope.available_variables(),
-        scope.available_functions(),
-        scope.available_classes(),
-    )
+    if node.type == "Identifier" or node.type == "Literal":
+        return
+
+    node.scope = copy.deepcopy(scope)
 
     if (
         node.type == "Program"
@@ -19,15 +23,13 @@ def scope_analysis(node: Node, scope: Scope = Scope()):
         or node.type == "ClassBody"
     ):
         if node.type == "ClassBody":
-            new_scope = Scope(parent=scope, type=ScopeType.CLASS)
+            new_scope = Scope(parent=scope, scope_type=ScopeType.CLASS)
         elif (
-            node.type == "BlockStatement"
-            and node.parent
-            and node.parent.type == "FunctionDeclaration"
+            node.type == "BlockStatement" and node.parent.type == "FunctionDeclaration"
         ):
-            new_scope = Scope(parent=scope, type=ScopeType.FUNCTION)
+            new_scope = Scope(parent=scope, scope_type=ScopeType.FUNCTION)
         else:
-            new_scope = Scope(parent=scope, type=ScopeType.BLOCK)
+            new_scope = Scope(parent=scope, scope_type=ScopeType.BLOCK)
 
         functions = filter(lambda x: x.type == "FunctionDeclaration", node.body)
         classes = filter(lambda x: x.type == "ClassDeclaration", node.body)
@@ -47,21 +49,18 @@ def scope_analysis(node: Node, scope: Scope = Scope()):
             scope_analysis(item, new_scope)
 
         # Store the scope at the end of the block so that it can be used for add mutation
-        node.end_scope = Scope(
-            new_scope.available_variables(),
-            new_scope.available_functions(),
-            new_scope.available_classes(),
-        )
+        node.end_scope = copy.deepcopy(new_scope)
 
     elif node.type == "VariableDeclarator":
         if node.init:
             scope_analysis(node.init, scope)
         if node.kind == "var":
             current_scope = scope
-            while current_scope.parent and current_scope.type != ScopeType.BLOCK:
+            while current_scope.parent and current_scope.scope_type != ScopeType.BLOCK:
                 current_scope = current_scope.parent
 
             current_scope.variables.add(node.id.name)
+            scope.parent_variables.add(node.id.name)
         else:
             scope.variables.add(node.id.name)
     else:
@@ -99,9 +98,15 @@ def random_value(scope: Scope, parent: Node):
         return Identifier(
             name=random.choice(list(scope.available_variables())), parent=parent
         )
-
     else:
         # TODO: add more types and interesting values
+        if random.random() < 0.5:
+            value = random.choice(interesting_integers)
+        else:
+            value = random.choice(interesting_floats)
+
         return Literal(
-            value=random.randint(0, 100), raw=str(random.randint(0, 100)), parent=parent
+            value=value,
+            raw=str(value),
+            parent=parent,
         )
