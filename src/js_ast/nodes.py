@@ -5,7 +5,6 @@ import abc
 import copy
 import dataclasses
 import json
-from ast import Tuple
 from dataclasses import dataclass, field
 from typing import Any, Generator, Optional, Union
 
@@ -23,7 +22,7 @@ estree_field_map = {
     "awaitAllowed": "await",
 }
 
-context_fields = {"parent", "scope"}
+context_fields = {"parent", "scope", "end_scope"}
 
 # Set of children fields that should not be children
 non_child_fields = {"id"}
@@ -131,7 +130,7 @@ class Node(abc.ABC):
             return [Node.from_dict(x) for x in data]
 
     def children(self) -> list[Node]:
-        children = []
+        children: list[Node] = []
 
         for field in self.fields:
             if field in non_child_fields:
@@ -146,6 +145,13 @@ class Node(abc.ABC):
                         children.append(node)
 
         return children
+
+    def root(self) -> Node:
+        """Return the root node of the tree."""
+        node = self
+        while node.parent:
+            node = node.parent
+        return node
 
     def __repr__(self) -> str:
         """String representation of the node."""
@@ -163,7 +169,7 @@ class Node(abc.ABC):
     def __iter__(self):
         return self.__iter__
 
-    def __deepcopy__(self, _memo):
+    def __deepcopy__(self):
         return self.__class__(
             **copy.deepcopy(
                 {
@@ -548,7 +554,6 @@ class TemplateElement(Node):
 # Patterns
 @dataclass(kw_only=True)
 class AssignmentProperty(Property):
-    value: Pattern
     kind: str = "init"
     method: bool = False
 

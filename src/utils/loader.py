@@ -1,9 +1,9 @@
 import copy
 import glob
-from hmac import new
 import logging
 import pickle
 from collections import defaultdict
+from hmac import new
 from pathlib import Path
 
 import esprima

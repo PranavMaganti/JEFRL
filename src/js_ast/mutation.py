@@ -56,8 +56,11 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
 
-    scope_analysis(new_node, target.scope)
-    fix_node_references(new_node)
+    root = target.root()
+
+    scope_analysis(root)
+    # Fix references in all nodes as we may have replaced function/variable declarations
+    fix_node_references(root)
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
@@ -90,12 +93,15 @@ def remove(target: Node) -> Node:
                     val.pop(i)
 
                     # Re-analyze the scope of the parent as it may have changed
-                    scope_analysis(target.parent, target.parent.scope)
+                    root = target.root()
+
+                    scope_analysis(root)
+                    # Fix references in all nodes as we may have removed function/variable declarations
+                    fix_node_references(root)
+
                     return target.parent
         elif val == target:
-            return target
-
-    print("Could not find target in parent", target, target.parent)
+            scope = target.end_scope if target.end_scope else target.scope
 
     raise ValueError("Could not find target in parent")
 
@@ -118,10 +124,11 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
 
     list_nodes = getattr(target, field)
 
-    scope = target.end_scope if target.end_scope else target.scope
     new_node.parent = target
+    root = target.root()
 
-    scope_analysis(new_node, scope)
+    scope_analysis(root)
+    # Only fix references of new node since we are adding it to the tree
     fix_node_references(new_node)
 
     list_nodes.append(new_node)

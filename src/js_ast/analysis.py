@@ -1,68 +1,117 @@
-import copy
+import logging
 import random
-import re
+from typing import Optional
 
-from torch import rand
-
-from js_ast.nodes import Identifier, Literal, Node
+from js_ast.nodes import (
+    AssignmentPattern,
+    BlockStatement,
+    CallExpression,
+    ClassBody,
+    ClassDeclaration,
+    FunctionDeclaration,
+    Identifier,
+    Literal,
+    Node,
+    Program,
+    VariableDeclaration,
+    VariableDeclarator,
+)
 from js_ast.scope import Scope, ScopeType
 from utils.interesting_values import interesting_floats, interesting_integers
 
 
 # Calculates variables, classes and functions available at each node and stores it in
 # a node attribute
-def scope_analysis(node: Node, scope: Scope = Scope()):
-    if node.type == "Identifier" or node.type == "Literal":
+def scope_analysis(node: Node, scope: Optional[Scope] = None):
+    if node.type == "Literal":
         return
 
-    node.scope = copy.deepcopy(scope)
+    if scope is None:
+        scope = Scope(scope_type=ScopeType.GLOBAL)
+
+    node.scope = Scope(
+        scope.available_variables(),
+        scope.available_functions(),
+        scope.available_classes(),
+    )
 
     if (
-        node.type == "Program"
-        or node.type == "BlockStatement"
-        or node.type == "ClassBody"
+        isinstance(node, Program)
+        or isinstance(node, BlockStatement)
+        or isinstance(node, ClassBody)
     ):
-        if node.type == "ClassBody":
+        if node.type == "Program":
+            new_scope = scope
+        elif node.type == "ClassBody":
             new_scope = Scope(parent=scope, scope_type=ScopeType.CLASS)
         elif (
-            node.type == "BlockStatement" and node.parent.type == "FunctionDeclaration"
+            node.type == "BlockStatement"
+            and node.parent
+            and (
+                node.parent.type == "FunctionDeclaration"
+                or node.parent.type == "FunctionExpression"
+                or node.parent.type == "ArrowFunctionExpression"
+            )
         ):
             new_scope = Scope(parent=scope, scope_type=ScopeType.FUNCTION)
         else:
             new_scope = Scope(parent=scope, scope_type=ScopeType.BLOCK)
 
-        functions = filter(lambda x: x.type == "FunctionDeclaration", node.body)
-        classes = filter(lambda x: x.type == "ClassDeclaration", node.body)
-        methods = filter(
-            lambda x: x.type == "MethodDefinition" and x.kind != "constructor",
-            node.body,
-        )
+        for item in node.body:
+            if isinstance(item, FunctionDeclaration):
+                for param in item.params:
+                    if isinstance(param, Identifier):
+                        new_scope.variables.add(param.name)
+                    elif isinstance(param, AssignmentPattern) and isinstance(
+                        param.left, Identifier
+                    ):
+                        new_scope.variables.add(param.left.name)
 
-        for function in functions:
-            new_scope.functions[function.id.name] = function.params
-        for class_ in classes:
-            new_scope.classes.add(class_.id.name)
-        for method in methods:
-            new_scope.functions[method.key.name] = method.value.params
+                new_scope.functions[item.id.name] = len(item.params)
+            elif isinstance(item, ClassDeclaration):
+                new_scope.classes.add(item.id.name)
+            # elif (
+            #     isinstance(item, MethodDefinition)
+            #     and item.kind != "constructor"
+            #     and isinstance(item.key, Identifier)
+            # ):
+            #     new_scope.functions[item.key.name] = item.value.params
 
         for item in node.body:
             scope_analysis(item, new_scope)
 
         # Store the scope at the end of the block so that it can be used for add mutation
-        node.end_scope = copy.deepcopy(new_scope)
+        node.end_scope = Scope(
+            new_scope.available_variables(),
+            new_scope.available_functions(),
+            new_scope.available_classes(),
+        )
 
-    elif node.type == "VariableDeclarator":
+    elif isinstance(node, VariableDeclarator):
+        if not (node.parent and isinstance(node.parent, VariableDeclaration)):
+            logging.error("VariableDeclarator not in VariableDeclaration")
+            return
+
+        if not isinstance(node.id, Identifier):
+            logging.error("VariableDeclarator id not Identifier")
+            return
+
         if node.init:
             scope_analysis(node.init, scope)
-        if node.kind == "var":
+
+        if node.parent.kind == "var":
+            print("VAR")
             current_scope = scope
-            while current_scope.parent and current_scope.scope_type != ScopeType.BLOCK:
+            while current_scope.scope_type == ScopeType.BLOCK and current_scope.parent:
+                current_scope.parent_variables.add(node.id.name)
                 current_scope = current_scope.parent
 
             current_scope.variables.add(node.id.name)
-            scope.parent_variables.add(node.id.name)
         else:
+            print(scope)
             scope.variables.add(node.id.name)
+            print(scope)
+
     else:
         for child in node.children():
             scope_analysis(child, scope)
@@ -71,22 +120,26 @@ def scope_analysis(node: Node, scope: Scope = Scope()):
 # Fixes the node by replacing identifiers and function calls with available variables and
 # functions
 def fix_node_references(node: Node):
+    if not node.scope:
+        print(node)
+        return
+
     scope = node.scope
-    if node.type == "Identifier":
+    if isinstance(node, Identifier):
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 
-    elif node.type == "CallExpression":
-        if node.callee.type == "Identifier":
+    elif isinstance(node, CallExpression):
+        if isinstance(node.callee, Identifier):
             if (
                 scope.available_functions()
                 and node.callee.name not in scope.available_functions()
             ):
-                function, params = random.choice(
+                function, num_params = random.choice(
                     list(scope.available_functions().items())
                 )
                 node.callee.name = function
-                node.arguments = [random_value(scope, node) for _ in range(len(params))]
+                node.arguments = [random_value(scope, node) for _ in range(num_params)]
     else:
         for child in node.children():
             fix_node_references(child)
