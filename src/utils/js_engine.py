@@ -6,11 +6,10 @@ import os
 import subprocess
 import tempfile
 from abc import ABC, abstractmethod
+from enum import StrEnum
 from multiprocessing import shared_memory
 from pathlib import Path
 from typing import Any, Optional
-
-from strenum import StrEnum
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
@@ -92,15 +91,15 @@ class Engine(ABC):
             self.lib = f.read()
 
     @abstractmethod
-    def get_executable(self) -> str:
+    def get_executable(self) -> Path:
         pass
 
     @abstractmethod
-    def get_corpus(self) -> str:
+    def get_corpus(self) -> Path:
         pass
 
     @abstractmethod
-    def get_corpus_lib(self) -> str:
+    def get_corpus_lib(self) -> Path:
         pass
 
     def execute_text(self, code: str) -> Optional[ExecutionData]:

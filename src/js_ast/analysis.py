@@ -92,25 +92,21 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
             logging.error("VariableDeclarator not in VariableDeclaration")
             return
 
-        if not isinstance(node.id, Identifier):
-            logging.error("VariableDeclarator id not Identifier")
-            return
+        if isinstance(node.id, Identifier):
+            if node.init:
+                scope_analysis(node.init, scope)
 
-        if node.init:
-            scope_analysis(node.init, scope)
+            if node.parent.kind == "var":
+                current_scope = scope
+                while (
+                    current_scope.scope_type == ScopeType.BLOCK and current_scope.parent
+                ):
+                    current_scope.parent_variables.add(node.id.name)
+                    current_scope = current_scope.parent
 
-        if node.parent.kind == "var":
-            print("VAR")
-            current_scope = scope
-            while current_scope.scope_type == ScopeType.BLOCK and current_scope.parent:
-                current_scope.parent_variables.add(node.id.name)
-                current_scope = current_scope.parent
-
-            current_scope.variables.add(node.id.name)
-        else:
-            print(scope)
-            scope.variables.add(node.id.name)
-            print(scope)
+                current_scope.variables.add(node.id.name)
+            else:
+                scope.variables.add(node.id.name)
 
     else:
         for child in node.children():

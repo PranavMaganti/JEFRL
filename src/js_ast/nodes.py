@@ -44,6 +44,7 @@ class Node(abc.ABC):
             if isinstance(val, Node):
                 val.parent = self
             elif isinstance(val, list):
+                node: Any
                 for node in val:
                     if isinstance(node, Node):
                         node.parent = self
@@ -68,6 +69,7 @@ class Node(abc.ABC):
             if isinstance(val, Node):
                 yield from val.traverse()
             elif isinstance(val, list):
+                node: Any
                 for node in val:
                     if isinstance(node, Node):
                         yield from node.traverse()
@@ -140,6 +142,7 @@ class Node(abc.ABC):
             if isinstance(val, Node):
                 children.append(val)
             elif isinstance(val, list):
+                node: Any
                 for node in val:
                     if isinstance(node, Node):
                         children.append(node)
@@ -147,7 +150,8 @@ class Node(abc.ABC):
         return children
 
     def root(self) -> Node:
-        """Return the root node of the tree."""
+        """Return the root node of the tre_getattr__(self, name: str):
+        return Nonee."""
         node = self
         while node.parent:
             node = node.parent
@@ -160,7 +164,7 @@ class Node(abc.ABC):
     def __str__(self) -> str:
         return json.dumps(self.to_dict(), indent=4)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str):
         return None
 
     def __dir__(self):
@@ -169,7 +173,7 @@ class Node(abc.ABC):
     def __iter__(self):
         return self.__iter__
 
-    def __deepcopy__(self):
+    def __deepcopy__(self, _memo):
         return self.__class__(
             **copy.deepcopy(
                 {
@@ -183,7 +187,7 @@ class Node(abc.ABC):
     def __getstate__(self):
         return self.__dict__
 
-    def __setstate__(self, d):
+    def __setstate__(self, d: dict[str, Any]):
         self.__dict__.update(d)
 
 

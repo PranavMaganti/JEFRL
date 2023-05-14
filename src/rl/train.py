@@ -5,7 +5,7 @@ import torch
 from torch import nn, optim
 from transformers import BatchEncoding, RobertaModel, RobertaTokenizer
 
-from rl.dqn import DQN, ReplayMemory, Transition
+from rl.dqn import DQN, BatchTransition, ReplayMemory
 from rl.env import FuzzingEnv
 
 EPS_START = 0.95  # Starting value of epsilon
@@ -67,15 +67,16 @@ def optimise_model(
         return
 
     transitions = memory.sample(batch_size)
-    batch = Transition(*zip(*transitions))
+    states, actions, next_states, rewards = zip(*transitions)
+    batch = BatchTransition(states, actions, next_states, rewards)  # type: ignore
 
     non_final_mask = torch.tensor(
-        tuple(map(lambda s: s is not None, batch.next_state)),
+        tuple(map(lambda s: s is not None, batch.next_states)),
         device=device,
         dtype=torch.bool,
     )
     non_final_next_states = code_tokenizer(
-        [s for s in batch.next_state if s is not None],
+        [s for s in batch.next_states if s is not None],
         return_tensors="pt",
         padding=True,
         truncation=True,
@@ -85,13 +86,13 @@ def optimise_model(
     ]
 
     state_batch = code_tokenizer(
-        batch.state,
+        batch.states,  # type: ignore
         return_tensors="pt",
         padding=True,
         truncation=True,
     ).to(device)
-    action_batch = torch.cat(batch.action).to(device)
-    reward_batch = torch.cat(batch.reward).to(device)
+    action_batch = torch.cat(batch.actions).to(device)
+    reward_batch = torch.cat(batch.rewards).to(device)
 
     # Encode the state and get the Q values for the actions taken
     hidden_state = code_net(**state_batch).last_hidden_state[:, 0, :]
@@ -115,5 +116,5 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)  # type: ignore
     optimizer.step()

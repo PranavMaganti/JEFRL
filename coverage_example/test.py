@@ -1,9 +1,9 @@
-from multiprocessing import shared_memory, resource_tracker
+import ctypes
+import math
 import os
 import subprocess
 import sys
-import ctypes
-import math
+from multiprocessing import resource_tracker, shared_memory
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
