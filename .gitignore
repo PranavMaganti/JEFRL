@@ -133,3 +133,7 @@ engines/*
 
 # VSCode
 .vscode/
+
+# Pre-processed data
+corpus/**/*.pkl
+corpus/**/*.ast
