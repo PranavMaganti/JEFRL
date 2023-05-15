@@ -2,20 +2,10 @@ import logging
 import random
 from typing import Optional
 
-from js_ast.nodes import (
-    AssignmentPattern,
-    BlockStatement,
-    CallExpression,
-    ClassBody,
-    ClassDeclaration,
-    FunctionDeclaration,
-    Identifier,
-    Literal,
-    Node,
-    Program,
-    VariableDeclaration,
-    VariableDeclarator,
-)
+from js_ast.nodes import (AssignmentPattern, BlockStatement, CallExpression,
+                          ClassBody, ClassDeclaration, FunctionDeclaration,
+                          Identifier, Literal, Node, Program,
+                          VariableDeclaration, VariableDeclarator)
 from js_ast.scope import Scope, ScopeType
 from utils.interesting_values import interesting_floats, interesting_integers
 
@@ -23,9 +13,6 @@ from utils.interesting_values import interesting_floats, interesting_integers
 # Calculates variables, classes and functions available at each node and stores it in
 # a node attribute
 def scope_analysis(node: Node, scope: Optional[Scope] = None):
-    if node.type == "Literal":
-        return
-
     if scope is None:
         scope = Scope(scope_type=ScopeType.GLOBAL)
 

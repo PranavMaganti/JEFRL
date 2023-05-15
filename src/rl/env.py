@@ -9,13 +9,14 @@ from typing import Any, Optional
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from tqdm import tqdm
 
 from js_ast import escodegen
 from js_ast.mutation import add, remove, replace
 from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
 
-INTERESTING_FOLDER = Path("corpus/interesting") 
+INTERESTING_FOLDER = Path("corpus/interesting")
 
 
 class FuzzingAction(IntEnum):
@@ -71,9 +72,9 @@ class FuzzingEnv(gym.Env[str, np.int64]):
 
         self._state: ProgramState
         self.steps_since_increased_coverage = 0
-        self.current_coverage = reduce(
-            lambda x, y: x | y.coverage_data, corpus, CoverageData()
-        )
+        self.current_coverage = CoverageData()
+        for state in tqdm(corpus):
+            self.current_coverage |= state.coverage_data
 
     def save_current_state(self, path: Path):
         with open(path, "w") as f:

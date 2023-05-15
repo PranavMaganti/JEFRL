@@ -8,8 +8,7 @@ from typing import Any
 import esprima
 import tqdm
 
-from js_ast.nodes import (CallExpression, ExpressionStatement, Node,
-                          UnknownNodeTypeError)
+from js_ast.nodes import CallExpression, ExpressionStatement, Node, UnknownNodeTypeError
 from rl.env import ProgramState
 from utils.js_engine import Engine, JSError
 
@@ -22,6 +21,7 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
 
     for file in tqdm.tqdm(files):
         exec_data_path = Path(file).with_suffix(".pkl")
+        ast_path = Path(file).with_suffix(".ast")
 
         with open(file, "r") as f:
             code = f.read()
@@ -35,20 +35,28 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
                 pickle.dump(exec_data, f)
 
         if exec_data is None or exec_data.error != JSError.NoError:
-            logging.info(f"Failed to execute {file} or produced an error")
+            logging.warning(f"Failed to execute {file} or produced an error")
             continue
 
-        try:
-            ast = esprima.parseScript(code, tolerant=True, jsx=True)
-            ast = Node.from_dict(ast.toDict())
-            if not isinstance(ast, Node):
-                logging.error(f"Failed to parse {file} when converting to custom ast")
+        if ast_path.exists():
+            with open(ast_path, "rb") as f:
+                ast = pickle.load(f)
+        else:
+            try:
+                ast = esprima.parseScript(code, tolerant=True, jsx=True)
+                ast = Node.from_dict(ast.toDict())
+                if not isinstance(ast, Node):
+                    logging.error(
+                        f"Failed to parse {file} when converting to custom ast"
+                    )
+                    continue
+                sanitise_ast(ast)
+                with open(ast_path, "wb") as f:
+                    pickle.dump(ast, f)
+
+            except (esprima.error_handler.Error, UnknownNodeTypeError):  # type: ignore
+                # logging.warning(f"Failed to parse {file}")
                 continue
-            sanitise_ast(ast)
-
-        except (esprima.error_handler.Error, UnknownNodeTypeError):  # type: ignore
-            # logging.warning(f"Failed to parse {file}")
-            continue
 
         corpus.append(ProgramState(ast, exec_data.coverage_data))  # type: ignore
 

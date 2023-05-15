@@ -10,6 +10,9 @@ from enum import StrEnum
 from multiprocessing import shared_memory
 from pathlib import Path
 from typing import Any, Optional
+from numpy.typing import NDArray
+
+import numpy as np
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
@@ -35,13 +38,14 @@ class ShmData(ctypes.Structure):
 
 
 class CoverageData:
-    def __init__(self, num_edges: int = 0, edges: bytearray = bytearray()):
+    def __init__(self, num_edges: int = 0, edges: Optional[NDArray[np.ubyte]] = None):
         self.num_edges = num_edges
-        self.edges = edges
-        self.hit_edges = 0
-
-        for i in range(math.ceil(self.num_edges / 8)):
-            self.hit_edges += self.edges[i].bit_count()
+        self.edges = (
+            np.zeros(math.ceil(self.num_edges / 8), dtype=np.ubyte)
+            if edges is None
+            else edges
+        )
+        self.hit_edges: int = np.unpackbits(self.edges).sum()  # type: ignore
 
     def coverage(self):
         return self.hit_edges / self.num_edges if self.num_edges > 0 else 0
@@ -51,19 +55,17 @@ class CoverageData:
             raise TypeError(
                 "Cannot perform bitwise or on CoverageData and " + type(__value)
             )
-        elif self.num_edges == 0 and __value.num_edges != 0:
-            return __value
-        elif self.num_edges != 0 and __value.num_edges == 0:
-            return self
-        elif self.num_edges != __value.num_edges:
-            raise ValueError(
-                "Cannot perform bitwise or on CoverageData with different number of edges"
+        if self.num_edges == __value.num_edges:
+            return CoverageData(
+                self.num_edges,
+                self.edges | __value.edges,
             )
+        elif self.num_edges == 0:
+            return __value
+        elif __value.num_edges == 0:
+            return self
 
-        return CoverageData(
-            self.num_edges,
-            bytearray([a | b for a, b in zip(self.edges, __value.edges)]),
-        )
+        raise ValueError("Cannot perform bitwise or on CoverageData with given objects")
 
     def __str__(self) -> str:
         return f"CoverageData({self.coverage()})"
@@ -131,7 +133,9 @@ class Engine(ABC):
 
         data = ShmData.from_buffer(shm.buf)
         exec_data = ExecutionData(
-            CoverageData(int(data.num_edges), bytearray(data.edges)), error, out
+            CoverageData(int(data.num_edges), np.array(data.edges, dtype=np.ubyte)),
+            error,
+            out,
         )
 
         del data
