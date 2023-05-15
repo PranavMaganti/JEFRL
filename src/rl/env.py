@@ -15,7 +15,7 @@ from js_ast.mutation import add, remove, replace
 from js_ast.nodes import Node
 from utils.js_engine import CoverageData, Engine, ExecutionData
 
-INTERESTING_FOLDER = Path("corpus/interesting")
+INTERESTING_FOLDER = Path("corpus/interesting") 
 
 
 class FuzzingAction(IntEnum):
@@ -141,20 +141,21 @@ class FuzzingEnv(gym.Env[str, np.int64]):
         self.steps_since_increased_coverage += 1
         new_node = self._state.current_node
 
-        if action == FuzzingAction.MOVE_UP:
-            return self._move_up()
-        elif action == FuzzingAction.MOVE_DOWN:
-            return self._move_down()
-        elif action == FuzzingAction.END:
-            return self._end()
-        elif action == FuzzingAction.REPLACE:
-            new_node = self._replace()
-        elif action == FuzzingAction.ADD:
-            new_node = self._add()
-        elif action == FuzzingAction.REMOVE:
-            new_node = self._remove()
-        else:
-            raise ValueError(f"Invalid action: {action}")
+        match (action):
+            case FuzzingAction.MOVE_UP:
+                return self._move_up()
+            case FuzzingAction.MOVE_DOWN:
+                return self._move_down()
+            case FuzzingAction.END:
+                return self._end()
+            case FuzzingAction.REPLACE:
+                new_node = self._replace()
+            case FuzzingAction.ADD:
+                new_node = self._add()
+            case FuzzingAction.REMOVE:
+                new_node = self._remove()
+            case _:
+                raise ValueError(f"Invalid action: {action}")
 
         if new_node is self._state.current_node:
             return (

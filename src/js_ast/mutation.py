@@ -1,10 +1,9 @@
 import copy
 import random
-from hmac import new
 from re import Pattern
+from typing import Tuple
 
 import numpy as np
-from torch import le
 
 from js_ast.analysis import fix_node_references, scope_analysis
 from js_ast.nodes import (
@@ -21,7 +20,7 @@ from js_ast.nodes import (
     VariableDeclarator,
 )
 
-node_add_types = {
+node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
     "Function": ("params", [Pattern]),
     "BlockStatement": ("body", [Statement]),
@@ -37,7 +36,7 @@ node_add_types = {
     "TemplateLiteral": ("expressions", [Expression]),
     "ObjectPattern": ("properties", [AssignmentProperty, RestElement]),
     "ArrayPattern": ("elements", [Pattern]),
-}
+}  # type: ignore
 
 non_empty_nodes = {"declarations"}
 non_add_types = {
@@ -101,7 +100,7 @@ def remove(target: Node) -> Node:
 
                     return target.parent
         elif val == target:
-            scope = target.end_scope if target.end_scope else target.scope
+            return target
 
     raise ValueError("Could not find target in parent")
 

@@ -29,7 +29,7 @@ non_child_fields = {"id"}
 
 
 @dataclass(kw_only=True)
-class Node(abc.ABC):
+class Node(metaclass=abc.ABCMeta):
     """Abstract Node class which defines node operations"""
 
     # loc: Optional[dict[str, int]]
@@ -114,7 +114,7 @@ class Node(abc.ABC):
                 for f in dataclasses.fields(node_class)
                 if f.name not in context_fields
             ]
-            params = {}
+            params: dict[str, Any] = {}
 
             for field in fields:
                 data_field = (
@@ -173,7 +173,7 @@ class Node(abc.ABC):
     def __iter__(self):
         return self.__iter__
 
-    def __deepcopy__(self, _memo):
+    def __deepcopy__(self, _memo: dict[int, Any]):
         return self.__class__(
             **copy.deepcopy(
                 {

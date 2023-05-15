@@ -3,14 +3,15 @@ from itertools import count
 import torch
 import tqdm
 from torch import optim
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import RobertaConfig, RobertaModel, RobertaTokenizer, BatchEncoding
 
 from js_ast.analysis import scope_analysis
 from rl.dqn import DQN, ReplayMemory
-from rl.env import FuzzingEnv
+from rl.env import FuzzingAction, FuzzingEnv
 from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.loader import get_subtrees, load_corpus
+import numpy as np
 
 # sys.setrecursionlimit(10000)  # default is 1000 in my installation
 
@@ -28,16 +29,20 @@ env = FuzzingEnv(corpus, subtrees, engine)
 LR = 1e-4  # Learning rate of the AdamW optimizer
 NUM_EPISODES = 10000  # Number of episodes to train the agent for
 
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model_name = "huggingface/CodeBERTa-small-v1"
-tokenizer = RobertaTokenizer.from_pretrained(model_name)
-config = RobertaConfig.from_pretrained(model_name)
-code_net = RobertaModel.from_pretrained(model_name, config=config).to(device)
+tokenizer: RobertaTokenizer = RobertaTokenizer.from_pretrained(model_name)  # type: ignore
+config: RobertaConfig = RobertaConfig.from_pretrained(model_name)  # type: ignore
+code_net: RobertaModel = RobertaModel.from_pretrained(model_name, config=config).to(device)  # type: ignore
+
+# Check types of the loaded model
+assert isinstance(tokenizer, RobertaTokenizer)
+assert isinstance(config, RobertaConfig)
+assert isinstance(code_net, RobertaModel)
 
 # Get number of actions from gym action space
-n_actions = env.action_space.n
+n_actions = len(FuzzingAction)
 n_observations = config.hidden_size
 
 policy_net = DQN(n_observations, n_actions).to(device)
@@ -50,13 +55,13 @@ update_count = 0
 
 for ep in range(NUM_EPISODES):
     state, info = env.reset()
-    tokenized_state = tokenizer(
+    tokenized_state: BatchEncoding = tokenizer(
         state, return_tensors="pt", padding=True, truncation=True
     ).to(device)
 
     for t in count():
         action = epsilon_greedy(policy_net, code_net, tokenized_state, env, t, device)
-        next_state, reward, done, info = env.step(int(action.item()))
+        next_state, reward, truncated, done, info = env.step(np.int64(action.item()))
 
         memory.push(state, action, next_state, torch.Tensor([reward]))
         optimise_model(

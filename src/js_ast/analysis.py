@@ -118,7 +118,7 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 def fix_node_references(node: Node):
     if not node.scope:
         print(node)
-        return
+        exit(1)
 
     scope = node.scope
     if isinstance(node, Identifier):
