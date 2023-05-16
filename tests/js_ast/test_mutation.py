@@ -1,12 +1,12 @@
 import pytest
 
-from js_ast.mutation import replace
+from js_ast.mutation import add, remove, replace
 from js_ast.nodes import (
     BinaryExpression,
     BlockStatement,
+    ExpressionStatement,
     Identifier,
     Literal,
-    Node,
     VariableDeclaration,
     VariableDeclarator,
 )
@@ -101,7 +101,6 @@ class TestReplace:
             left=target,
             operator="*",
             right=Literal(value=2, raw="2"),
-            scope=Scope(scope_type=ScopeType.GLOBAL),
         )
         root = BlockStatement(
             body=[
@@ -135,5 +134,138 @@ class TestReplace:
             assert hasattr(child, "scope")
 
 
-if __name__ == "__main__":
-    pytest.main()
+class TestAdd:
+    def test_no_parent(self):
+        subtrees = {"Identifier": [Identifier(name="x")]}
+        target = Identifier(name="y")
+        target.parent = None
+
+        new_node = add(subtrees, target)
+
+        assert new_node == target
+
+    def test_no_subtree(self):
+        subtrees = {}
+        target = Identifier(name="x")
+        target.parent = BinaryExpression(
+            left=target,
+            operator="+",
+            right=Literal(value=1, raw="1"),
+        )
+        new_node = add(subtrees, target)
+
+        assert new_node == target
+
+    def test_add(self):
+        subtrees = {
+            "ExpressionStatement": [
+                ExpressionStatement(
+                    expression=BinaryExpression(
+                        left=Identifier(name="z"),
+                        operator="+",
+                        right=Literal(value=1, raw="1"),
+                    ),
+                    directive="",
+                )
+            ]
+        }
+        target = BlockStatement(
+            body=[
+                VariableDeclaration(
+                    kind="let",
+                    declarations=[
+                        VariableDeclarator(id=Identifier(name="x"), init=None),
+                        VariableDeclarator(id=Identifier(name="y"), init=None),
+                    ],
+                ),
+            ]
+        )
+        new_node = add(subtrees, target)
+
+        assert new_node in target.body
+        assert new_node.parent == target
+
+        assert new_node.type == "ExpressionStatement"
+        assert new_node.expression.type == "BinaryExpression"
+        assert new_node.expression.left.type == "Identifier"
+        assert new_node.expression.left.name in ["x", "y"]
+        assert new_node.expression.operator == "+"
+        assert new_node.expression.right.type == "Literal"
+        assert new_node.expression.right.value == 1
+        assert new_node.expression.right.raw == "1"
+
+    def test_no_list_attr(self):
+        subtrees = {"Identifier": [Identifier(name="y")]}
+
+        target = BinaryExpression(
+            left=Identifier(name="x"),
+            operator="+",
+            right=Literal(value=1, raw="1"),
+        )
+
+        new_node = add(subtrees, target)
+
+        assert new_node == target
+
+
+class TestRemove:
+    def test_no_parent(self):
+        target = Identifier(name="x")
+        target.parent = None
+
+        new_node = remove(target)
+
+        assert new_node == target
+
+    def test_no_match(self):
+        target = Identifier(name="x")
+        target.parent = BinaryExpression(
+            left=Literal(value=1, raw="1"),
+            operator="+",
+            right=Literal(value=2, raw="2"),
+        )
+
+        with pytest.raises(ValueError):
+            remove(target)
+
+    def test_remove_from_list(self):
+        target = ExpressionStatement(
+            expression=BinaryExpression(
+                left=Identifier(name="x"),
+                operator="+",
+                right=Literal(value=1, raw="1"),
+            ),
+            directive="",
+        )
+
+        parent = BlockStatement(
+            body=[
+                VariableDeclaration(
+                    kind="let",
+                    declarations=[
+                        VariableDeclarator(id=Identifier(name="x"), init=None),
+                        VariableDeclarator(id=Identifier(name="y"), init=None),
+                    ],
+                ),
+                target,
+            ]
+        )
+        target.parent = parent
+
+        new_node = remove(target)
+
+        assert new_node == parent
+        assert len(new_node.body) == 1
+        assert new_node.body[0].type == "VariableDeclaration"
+
+    def test_remove_attr(self):
+        target = Identifier(name="x")
+        target.parent = BinaryExpression(
+            left=target,
+            operator="+",
+            right=Literal(value=2, raw="2"),
+        )
+
+        new_node = remove(target)
+
+        assert new_node == target

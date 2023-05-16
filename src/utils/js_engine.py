@@ -10,9 +10,9 @@ from enum import StrEnum
 from multiprocessing import shared_memory
 from pathlib import Path
 from typing import Any, Optional
-from numpy.typing import NDArray
 
 import numpy as np
+from numpy.typing import NDArray
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8

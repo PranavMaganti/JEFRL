@@ -27,6 +27,6 @@ def parseScript(
     delegate: Callable[[Node, Any], Node] = ...,
     tolerant: bool = ...,
     jsx: bool = ...,
-    **kwargs: dict[str, Any]
+    **kwargs: dict[str, Any],
 ) -> Union[Module, Script]: ...
 def tokenize(code, options=..., delegate=..., **kwargs): ...

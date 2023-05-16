@@ -121,18 +121,21 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
         for t in types
         if t.__name__ in subtrees and t.__name__ not in non_add_types
     ]
+
+    if len(types_name) == 0:
+        return target
+
     add_type = np.random.choice(types_name)
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
 
     list_nodes = getattr(target, field)
 
     new_node.parent = target
-    root = target.root()
+    list_nodes.append(new_node)
 
+    root = target.root()
     scope_analysis(root)
     # Only fix references of new node since we are adding it to the tree
     fix_node_references(new_node)
-
-    list_nodes.append(new_node)
 
     return new_node
