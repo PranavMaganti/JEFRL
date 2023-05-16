@@ -52,6 +52,9 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     if target.parent is None:
         return target
 
+    if target.type not in subtrees:
+        return target
+
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
 
