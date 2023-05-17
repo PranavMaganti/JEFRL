@@ -3,7 +3,8 @@ import random
 
 import torch
 from torch import nn, optim
-from transformers import BatchEncoding, RobertaModel, RobertaTokenizer
+from torch.nn.utils.rnn import pad_sequence
+from transformers import RobertaModel, RobertaTokenizerFast
 
 from rl.dqn import DQN, BatchTransition, ReplayMemory
 from rl.env import FuzzingEnv
@@ -11,7 +12,7 @@ from rl.env import FuzzingEnv
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 10  # Number of transitions sampled from the replay buffer
+BATCH_SIZE = 8  # Number of transitions sampled from the replay buffer
 GAMMA = 0.99  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
@@ -19,8 +20,10 @@ TAU = 0.005  # Update rate of the target network
 # Select action based on epsilon-greedy policy
 def epsilon_greedy(
     policy_net: DQN,
+    state: str,
     code_net: RobertaModel,
-    state: BatchEncoding,
+    code_tokenizer: RobertaTokenizerFast,
+    code_lstm: nn.LSTM,
     env: FuzzingEnv,
     step: int,
     device: torch.device,
@@ -30,8 +33,11 @@ def epsilon_greedy(
     if sample > eps_threshold:
         # Sample action from model depending of state
         with torch.no_grad():
-            hidden_state = code_net(**state).last_hidden_state[0][0]
-            return policy_net(hidden_state).argmax().view(1, 1)
+            # Get the code snippet embedding
+            state_embedding = code_embedding(
+                [state], code_net, code_tokenizer, code_lstm, device
+            )
+            return policy_net(state_embedding).argmax().view(1, 1)
     else:
         # Sample random action
         return torch.tensor(
@@ -51,11 +57,80 @@ def soft_update_params(policy_net: DQN, target_net: DQN, tau: float = TAU):
     target_net.load_state_dict(target_net_state_dict)
 
 
+# Split a tensor into multiple tensors based on a mapping with elements with
+# the same mapping value being grouped together in the same tensor. Then append
+# these into a batch with padding.
+def split_tensor_by_mapping(tensor: torch.Tensor, mapping: list[int]) -> torch.Tensor:
+    start = 0
+    outputs: list[torch.Tensor] = []
+
+    for i, e in enumerate(mapping):
+        if e == mapping[start]:
+            continue
+
+        outputs.append(tensor[start:i])
+        start = i
+
+    outputs.append(tensor[start:])
+
+    return pad_sequence(outputs, batch_first=True)
+
+
+# Embed a list of code snippets into a tensor. Handles long code sequences by
+# splitting them into separate sequences and then passing them through an LSTM
+def code_embedding(
+    code: list[str],
+    code_net: RobertaModel,
+    code_tokenizer: RobertaTokenizerFast,
+    code_lstm: nn.LSTM,
+    device: torch.device,
+):
+    # Tokenize the code, splitting long token sequences into multiple elements
+    # of the batch
+    tokens = code_tokenizer.batch_encode_plus(
+        code,
+        max_length=512,
+        return_tensors="pt",
+        return_overflowing_tokens=True,
+        padding=True,
+        truncation=True,
+    ).to(device)
+
+    # Split inputs into several batches if necessary
+    input_ids = torch.split(tokens["input_ids"], BATCH_SIZE)
+    attention_mask = torch.split(tokens["attention_mask"], BATCH_SIZE)
+
+    out = torch.Tensor().to(device)
+
+    # Run the code through the RoBERTa model
+    for i in range(len(input_ids)):
+        out = torch.cat(
+            (
+                out,
+                code_net(
+                    input_ids=input_ids[i], attention_mask=attention_mask[i]
+                ).pooler_output,
+            )
+        )
+
+    overflow_mapping: list[int] = tokens["overflow_to_sample_mapping"]  # type: ignore
+
+    # Split the output of the last hidden state into the different sequences
+    sequence_outputs = split_tensor_by_mapping(out, overflow_mapping)
+
+    # Run the LSTM on each sequence
+    lstm_outputs, _ = code_lstm(sequence_outputs)
+
+    # Return final output of the LSTM as the code embedding
+    return lstm_outputs[:, -1, :]
+
+
 def optimise_model(
     policy_net: DQN,
     target_net: DQN,
     code_net: RobertaModel,
-    code_tokenizer: RobertaTokenizer,
+    code_tokenizer: RobertaTokenizerFast,
+    code_lstm: nn.LSTM,
     optimizer: optim.Optimizer,
     memory: ReplayMemory,
     device: torch.device,
@@ -75,34 +150,30 @@ def optimise_model(
         device=device,
         dtype=torch.bool,
     )
-    non_final_next_states = code_tokenizer(
-        [s for s in batch.next_states if s is not None],
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-    ).to(device)
-    hidden_non_final_next_states = code_net(**non_final_next_states).last_hidden_state[
-        :, 0, :
-    ]
 
-    state_batch = code_tokenizer(
+    state_batch = code_embedding(
         batch.states,  # type: ignore
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-    ).to(device)
+        code_net,
+        code_tokenizer,
+        code_lstm,
+        device,
+    )
     action_batch = torch.cat(batch.actions).to(device)
     reward_batch = torch.cat(batch.rewards).to(device)
 
     # Encode the state and get the Q values for the actions taken
-    hidden_state = code_net(**state_batch).last_hidden_state[:, 0, :]
-    state_action_values = policy_net(hidden_state).gather(1, action_batch)
+    state_action_values = policy_net(state_batch).gather(1, action_batch)
 
     next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(
-            hidden_non_final_next_states
-        ).max(1)[0]
+        non_final_next_states = code_embedding(
+            [s for s in batch.next_states if s is not None],
+            code_net,
+            code_tokenizer,
+            code_lstm,
+            device,
+        )
+        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
 
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * gamma) + reward_batch

@@ -3,16 +3,16 @@ import sys
 from logging import FileHandler, LogRecord, StreamHandler
 
 
-class InfoFilter(logging.Filter):
+class ConsoleFilter(logging.Filter):
     def filter(self, record: LogRecord) -> bool:
-        return record.levelno == logging.INFO
+        return record.levelno == logging.INFO or record.levelno == logging.ERROR
 
 
 def setup_logging():
     file_handler = FileHandler("test.log")
     console_handler = StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
-    console_handler.addFilter(InfoFilter())
+    console_handler.addFilter(ConsoleFilter())
 
     logging.basicConfig(
         level=logging.DEBUG,

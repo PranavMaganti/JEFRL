@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from itertools import count
 
@@ -6,18 +7,26 @@ import numpy as np
 import torch
 import tqdm
 from torch import optim
-from transformers import BatchEncoding, RobertaConfig, RobertaModel, RobertaTokenizer
+from transformers import (
+    BatchEncoding,
+    RobertaConfig,
+    RobertaModel,
+    RobertaTokenizerFast,
+)
 
 from js_ast.analysis import scope_analysis
 from rl.dqn import DQN, ReplayMemory
 from rl.env import FuzzingAction, FuzzingEnv
-from rl.train import epsilon_greedy, optimise_model, soft_update_params
+from rl.train import code_embedding, epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.loader import get_subtrees, load_corpus
 from utils.logging import setup_logging
 
-# Logging setup
+# System setup
+os.environ["TOKENIZERS_PARALLELISM"] = "true"
 sys.setrecursionlimit(10000)
+
+# Logging setup
 setup_logging()
 
 # Environment setup
@@ -44,12 +53,14 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logging.info("Loading CodeBERTa model")
 
 model_name = "huggingface/CodeBERTa-small-v1"
-tokenizer: RobertaTokenizer = RobertaTokenizer.from_pretrained(model_name)  # type: ignore
+tokenizer: RobertaTokenizerFast = RobertaTokenizerFast.from_pretrained(model_name)  # type: ignore
 config: RobertaConfig = RobertaConfig.from_pretrained(model_name)  # type: ignore
 code_net: RobertaModel = RobertaModel.from_pretrained(model_name, config=config).to(device)  # type: ignore
+code_lstm = torch.nn.LSTM(768, 768, 1, batch_first=True).to(device)
+
 
 # Check types of the loaded model
-assert isinstance(tokenizer, RobertaTokenizer)
+assert isinstance(tokenizer, RobertaTokenizerFast)
 assert isinstance(config, RobertaConfig)
 assert isinstance(code_net, RobertaModel)
 
@@ -63,24 +74,34 @@ policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
-optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
+optimizer = optim.AdamW(
+    [*code_net.parameters(), *code_lstm.parameters(), *policy_net.parameters()],
+    lr=LR,
+    amsgrad=True,
+)
 memory = ReplayMemory(10000)
 update_count = 0
 
 logging.info("Starting training")
 for ep in range(NUM_EPISODES):
     state, info = env.reset()
-    tokenized_state: BatchEncoding = tokenizer(
-        state, return_tensors="pt", padding=True, truncation=True
-    ).to(device)
 
     for t in count():
-        action = epsilon_greedy(policy_net, code_net, tokenized_state, env, t, device)
+        action = epsilon_greedy(
+            policy_net, state, code_net, tokenizer, code_lstm, env, t, device
+        )
         next_state, reward, truncated, done, info = env.step(np.int64(action.item()))
 
         memory.push(state, action, next_state, torch.Tensor([reward]))
         optimise_model(
-            policy_net, target_net, code_net, tokenizer, optimizer, memory, device
+            policy_net,
+            target_net,
+            code_net,
+            tokenizer,
+            code_lstm,
+            optimizer,
+            memory,
+            device,
         )
         soft_update_params(policy_net, target_net)
 

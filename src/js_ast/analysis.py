@@ -2,10 +2,20 @@ import logging
 import random
 from typing import Optional
 
-from js_ast.nodes import (AssignmentPattern, BlockStatement, CallExpression,
-                          ClassBody, ClassDeclaration, FunctionDeclaration,
-                          Identifier, Literal, Node, Program,
-                          VariableDeclaration, VariableDeclarator)
+from js_ast.nodes import (
+    AssignmentPattern,
+    BlockStatement,
+    CallExpression,
+    ClassBody,
+    ClassDeclaration,
+    FunctionDeclaration,
+    Identifier,
+    Literal,
+    Node,
+    Program,
+    VariableDeclaration,
+    VariableDeclarator,
+)
 from js_ast.scope import Scope, ScopeType
 from utils.interesting_values import interesting_floats, interesting_integers
 
