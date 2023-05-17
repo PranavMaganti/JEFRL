@@ -84,7 +84,7 @@ for ep in range(NUM_EPISODES):
         )
         soft_update_params(policy_net, target_net)
 
-        if done:
+        if done or truncated:
             break
 
         state = next_state

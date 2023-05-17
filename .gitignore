@@ -137,3 +137,4 @@ engines/*
 # Pre-processed data
 corpus/**/*.pkl
 corpus/**/*.ast
+corpus/interesting

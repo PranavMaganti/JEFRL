@@ -11,7 +11,7 @@ from rl.env import FuzzingEnv
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 12  # Number of transitions sampled from the replay buffer
+BATCH_SIZE = 10  # Number of transitions sampled from the replay buffer
 GAMMA = 0.99  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 

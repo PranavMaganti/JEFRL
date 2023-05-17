@@ -55,28 +55,38 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     if target.type not in subtrees:
         return target
 
+    root = target.root()
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
 
-    root = target.root()
+    # TODO: Tidy up this code by possibly adding field to parent property of node
+    # which indicates which field in the parent the child belongs to
+    found = False
+    for field in target.parent.fields:
+        val = getattr(target.parent, field)
+        if isinstance(val, list):
+            for i, item in enumerate(val):
+                if item == target:
+                    val[i] = new_node
+                    found = True
+                    break
+        elif val is target:
+            setattr(target.parent, field, new_node)
+            found = True
+
+        if found:
+            break
+
+    if not found:
+        print(target)
+        print(target.parent)
+        raise ValueError("Could not find target in parent")
 
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root)
 
-    for field in target.parent.fields:
-        val = getattr(target.parent, field)
-
-        if isinstance(val, list):
-            for i, item in enumerate(val):
-                if item == target:
-                    val[i] = new_node
-                    return new_node
-        elif val is target:
-            setattr(target.parent, field, new_node)
-            return new_node
-
-    raise ValueError("Could not find target in parent")
+    return new_node
 
 
 def remove(target: Node) -> Node:

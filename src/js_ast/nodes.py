@@ -64,15 +64,8 @@ class Node(metaclass=abc.ABCMeta):
     def traverse(self) -> Generator[Node, None, None]:
         """Pre-order traversal of this node and all of its children."""
         yield self
-        for field in self.fields:
-            val = getattr(self, field)
-            if isinstance(val, Node):
-                yield from val.traverse()
-            elif isinstance(val, list):
-                node: Any
-                for node in val:
-                    if isinstance(node, Node):
-                        yield from node.traverse()
+        for node in self.children():
+            yield from node.traverse()
 
     def to_dict(self) -> dict[str, Any]:
         """Transform the Node back into an Esprima-compatible AST dictionary."""

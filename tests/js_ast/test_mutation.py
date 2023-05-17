@@ -92,7 +92,7 @@ class TestReplace:
         assert new_node.right.name == "y"
 
         for child in parent.traverse():
-            assert hasattr(child, "scope")
+            assert child.scope is not None
 
     def test_replace_nested(self):
         subtrees = {"Identifier": [Identifier(name="y")]}
@@ -131,7 +131,7 @@ class TestReplace:
         assert new_node.name == "y"
 
         for child in root.traverse():
-            assert hasattr(child, "scope")
+            assert child.scope is not None
 
 
 class TestAdd:

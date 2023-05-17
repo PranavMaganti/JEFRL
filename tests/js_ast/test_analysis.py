@@ -38,9 +38,11 @@ class TestScopeAnalysis:
 
         # Ensure that the variable x is in scope
         for node in program_node.traverse():
-            assert hasattr(node, "scope")
+            if node.scope is None:
+                print(node)
+            assert node.scope is not None
 
-        assert hasattr(program_node, "end_scope")
+        assert program_node.end_scope is not None
         assert "x" in program_node.end_scope.available_variables()
 
     def test_basic_funcs(self):
@@ -65,7 +67,7 @@ class TestScopeAnalysis:
         scope_analysis(program_node)
 
         for node in program_node.traverse():
-            assert hasattr(node, "scope")
+            assert node.scope is not None
 
         assert hasattr(program_node, "end_scope")
         assert hasattr(program_node.body[0].body, "end_scope")
@@ -199,7 +201,7 @@ class TestFixNodeReferences:
         fix_node_references(node)
         assert node.name in scope.available_variables()
         for child in node.traverse():
-            assert hasattr(child, "scope")
+            assert node.scope is not None
 
     def test_call_expression(self):
         node = CallExpression(
@@ -213,7 +215,7 @@ class TestFixNodeReferences:
         assert node.callee.name in scope.available_functions()
         assert len(node.arguments) == 1
         for child in node.traverse():
-            assert hasattr(child, "scope")
+            assert node.scope is not None
 
     def test_nested_nodes(self):
         random.seed(0)
@@ -242,4 +244,4 @@ class TestFixNodeReferences:
         )
 
         for child in node.traverse():
-            assert hasattr(child, "scope")
+            assert node.scope is not None

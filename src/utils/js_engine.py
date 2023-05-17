@@ -74,7 +74,9 @@ class CoverageData:
         if not isinstance(__value, CoverageData):
             return False
 
-        return self.edges == __value.edges and self.num_edges == __value.num_edges
+        return (
+            self.edges == __value.edges
+        ).all() and self.num_edges == __value.num_edges
 
 
 class ExecutionData:

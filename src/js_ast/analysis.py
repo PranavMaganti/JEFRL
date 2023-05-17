@@ -2,20 +2,10 @@ import logging
 import random
 from typing import Optional
 
-from js_ast.nodes import (
-    AssignmentPattern,
-    BlockStatement,
-    CallExpression,
-    ClassBody,
-    ClassDeclaration,
-    FunctionDeclaration,
-    Identifier,
-    Literal,
-    Node,
-    Program,
-    VariableDeclaration,
-    VariableDeclarator,
-)
+from js_ast.nodes import (AssignmentPattern, BlockStatement, CallExpression,
+                          ClassBody, ClassDeclaration, FunctionDeclaration,
+                          Identifier, Literal, Node, Program,
+                          VariableDeclaration, VariableDeclarator)
 from js_ast.scope import Scope, ScopeType
 from utils.interesting_values import interesting_floats, interesting_integers
 
@@ -84,12 +74,8 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
             new_scope.available_classes(),
         )
 
-    elif isinstance(node, VariableDeclarator):
-        if not (node.parent and isinstance(node.parent, VariableDeclaration)):
-            logging.error("VariableDeclarator not in VariableDeclaration")
-            return
-
-        if isinstance(node.id, Identifier):
+    elif isinstance(node, VariableDeclarator) and isinstance(node.id, Identifier):
+        if node.parent and isinstance(node.parent, VariableDeclaration):
             if node.init:
                 scope_analysis(node.init, scope)
 
@@ -104,7 +90,6 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
                 current_scope.variables.add(node.id.name)
             else:
                 scope.variables.add(node.id.name)
-
     else:
         for child in node.children():
             scope_analysis(child, scope)
@@ -122,17 +107,16 @@ def fix_node_references(node: Node):
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 
-    elif isinstance(node, CallExpression):
-        if isinstance(node.callee, Identifier):
-            if (
-                scope.available_functions()
-                and node.callee.name not in scope.available_functions()
-            ):
-                function, num_params = random.choice(
-                    list(scope.available_functions().items())
-                )
-                node.callee.name = function
-                node.arguments = [random_value(scope, node) for _ in range(num_params)]
+    elif isinstance(node, CallExpression) and isinstance(node.callee, Identifier):
+        if (
+            scope.available_functions()
+            and node.callee.name not in scope.available_functions()
+        ):
+            function, num_params = random.choice(
+                list(scope.available_functions().items())
+            )
+            node.callee.name = function
+            node.arguments = [random_value(scope, node) for _ in range(num_params)]
     else:
         for child in node.children():
             fix_node_references(child)
@@ -142,7 +126,9 @@ def fix_node_references(node: Node):
 def random_value(scope: Scope, parent: Node):
     if scope.available_variables() and random.random() < 0.5:
         return Identifier(
-            name=random.choice(list(scope.available_variables())), parent=parent
+            name=random.choice(list(scope.available_variables())),
+            parent=parent,
+            scope=scope,
         )
     else:
         # TODO: add more types and interesting values
@@ -155,4 +141,5 @@ def random_value(scope: Scope, parent: Node):
             value=value,
             raw=str(value),
             parent=parent,
+            scope=scope,
         )
