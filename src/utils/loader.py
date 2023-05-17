@@ -75,6 +75,7 @@ def get_subtrees(corpus: list[ProgramState]) -> dict[str, list[Node]]:
     return subtrees
 
 
+# Remove all assert statements from the AST
 def sanitise_ast(ast: Node):
     for node in ast.traverse():
         for field in node.fields:
