@@ -2,6 +2,7 @@ import random
 from collections import deque
 from typing import NamedTuple, Optional
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -9,9 +10,9 @@ Transition = NamedTuple(
     "Transition",
     [
         ("state", str),
-        ("action", torch.Tensor),
+        ("action", np.int64),
         ("next_state", Optional[str]),
-        ("reward", torch.Tensor),
+        ("reward", float),
     ],
 )
 
@@ -19,9 +20,9 @@ BatchTransition = NamedTuple(
     "BatchTransition",
     [
         ("states", tuple[str]),
-        ("actions", tuple[torch.Tensor]),
+        ("actions", tuple[np.int64]),
         ("next_states", tuple[Optional[str]]),
-        ("rewards", tuple[torch.Tensor]),
+        ("rewards", tuple[float]),
     ],
 )
 
@@ -33,9 +34,9 @@ class ReplayMemory:
     def push(
         self,
         state: str,
-        action: torch.Tensor,
+        action: np.int64,
         next_state: Optional[str],
-        reward: torch.Tensor,
+        reward: float,
     ):
         """Save a transition"""
         self.memory.append(Transition(state, action, next_state, reward))

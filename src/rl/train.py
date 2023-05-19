@@ -1,10 +1,11 @@
 import math
 import random
 
+import numpy as np
 import torch
 from torch import nn, optim
 from torch.nn.utils.rnn import pad_sequence
-from transformers import RobertaModel, RobertaTokenizerFast
+from transformers import BatchEncoding, RobertaModel, RobertaTokenizerFast
 
 from rl.dqn import DQN, BatchTransition, ReplayMemory
 from rl.env import FuzzingEnv
@@ -12,7 +13,7 @@ from rl.env import FuzzingEnv
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 8  # Number of transitions sampled from the replay buffer
+BATCH_SIZE = 12  # Number of transitions sampled from the replay buffer
 GAMMA = 0.99  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
@@ -27,7 +28,7 @@ def epsilon_greedy(
     env: FuzzingEnv,
     step: int,
     device: torch.device,
-) -> torch.Tensor:
+) -> np.int64:
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * math.exp(-1.0 * step / EPS_DECAY)
     if sample > eps_threshold:
@@ -37,12 +38,10 @@ def epsilon_greedy(
             state_embedding = code_embedding(
                 [state], code_net, code_tokenizer, code_lstm, device
             )
-            return policy_net(state_embedding).argmax().view(1, 1)
+            return np.int64(policy_net(state_embedding).argmax().item())
     else:
         # Sample random action
-        return torch.tensor(
-            [[env.action_space.sample()]], device=device, dtype=torch.long
-        )
+        return env.action_space.sample()
 
 
 def soft_update_params(policy_net: DQN, target_net: DQN, tau: float = TAU):
@@ -64,8 +63,8 @@ def split_tensor_by_mapping(tensor: torch.Tensor, mapping: list[int]) -> torch.T
     start = 0
     outputs: list[torch.Tensor] = []
 
-    for i, e in enumerate(mapping):
-        if e == mapping[start]:
+    for i in range(1, len(tensor)):
+        if mapping[i] == mapping[start]:
             continue
 
         outputs.append(tensor[start:i])
@@ -87,7 +86,7 @@ def code_embedding(
 ):
     # Tokenize the code, splitting long token sequences into multiple elements
     # of the batch
-    tokens = code_tokenizer.batch_encode_plus(
+    tokens: BatchEncoding = code_tokenizer.batch_encode_plus(  # type: ignore
         code,
         max_length=512,
         return_tensors="pt",
@@ -96,22 +95,25 @@ def code_embedding(
         truncation=True,
     ).to(device)
 
-    # Split inputs into several batches if necessary
+    # # Split inputs into several batches if necessary
+    # input_ids = torch.split(tokens["input_ids"], BATCH_SIZE)
+    # attention_mask = torch.split(tokens["attention_mask"], BATCH_SIZE)
     input_ids = torch.split(tokens["input_ids"], BATCH_SIZE)
     attention_mask = torch.split(tokens["attention_mask"], BATCH_SIZE)
 
     out = torch.Tensor().to(device)
 
     # Run the code through the RoBERTa model
-    for i in range(len(input_ids)):
-        out = torch.cat(
-            (
-                out,
-                code_net(
-                    input_ids=input_ids[i], attention_mask=attention_mask[i]
-                ).pooler_output,
+    with torch.no_grad():
+        for i in range(len(input_ids)):
+            out = torch.cat(
+                (
+                    out,
+                    code_net(
+                        input_ids=input_ids[i], attention_mask=attention_mask[i]
+                    ).pooler_output,
+                )
             )
-        )
 
     overflow_mapping: list[int] = tokens["overflow_to_sample_mapping"]  # type: ignore
 
@@ -158,8 +160,8 @@ def optimise_model(
         code_lstm,
         device,
     )
-    action_batch = torch.cat(batch.actions).to(device)
-    reward_batch = torch.cat(batch.rewards).to(device)
+    action_batch = torch.tensor(batch.actions).view(-1, 1).to(device)
+    reward_batch = torch.tensor(batch.rewards).to(device)
 
     # Encode the state and get the Q values for the actions taken
     state_action_values = policy_net(state_batch).gather(1, action_batch)
@@ -174,9 +176,12 @@ def optimise_model(
             device,
         )
         next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+        del non_final_mask
+        del non_final_next_states
 
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * gamma) + reward_batch
+    del next_state_values
 
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()

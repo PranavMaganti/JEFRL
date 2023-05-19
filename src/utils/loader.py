@@ -58,7 +58,7 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
                 # logging.warning(f"Failed to parse {file}")
                 continue
 
-        corpus.append(ProgramState(ast, exec_data.coverage_data))  # type: ignore
+        corpus.append(ProgramState(ast, exec_data.coverage_data, file))  # type: ignore
 
     logging.info(f"Loaded {len(corpus)}/{len(files)} files from corpus")
     return corpus
@@ -68,7 +68,7 @@ def get_subtrees(corpus: list[ProgramState]) -> dict[str, list[Node]]:
     subtrees: dict[str, list[Node]] = defaultdict(list)
 
     for state in corpus:
-        for node in state.current_node.traverse():
+        for node in state.target_node.traverse():
             if hasattr(node, "type"):
                 subtrees[node.type].append(node)
 

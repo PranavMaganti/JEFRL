@@ -27,6 +27,7 @@ class JSError(StrEnum):
     SyntaxError = "SyntaxError"
     TypeError = "TypeError"
     Other = "Other"
+    TimeoutError = "TimeoutError"
     NoError = "NoError"
 
 
@@ -117,27 +118,33 @@ class Engine(ABC):
     def execute_file(self, file: str):
         shm = shared_memory.SharedMemory(name=SHM_ID, create=True, size=SHM_SIZE)
         os.environ["SHM_ID"] = SHM_ID
+        out: Optional[str] = None
 
-        res = subprocess.run(
-            [self.get_executable(), file], capture_output=True, check=False
-        )
-
-        out = res.stdout.decode("utf-8")
-        error = JSError.NoError
-        if "ReferenceError" in out:
-            error = JSError.ReferenceError
-        elif "SyntaxError" in out:
-            error = JSError.SyntaxError
-        elif "TypeError" in out:
-            error = JSError.TypeError
-        elif res.returncode != 0:
-            error = JSError.Other
+        try:
+            res = subprocess.run(
+                [self.get_executable(), file],
+                capture_output=True,
+                check=False,
+                timeout=5,
+            )
+            out = res.stdout.decode("utf-8")
+            error = JSError.NoError
+            if "ReferenceError" in out:
+                error = JSError.ReferenceError
+            elif "SyntaxError" in out:
+                error = JSError.SyntaxError
+            elif "TypeError" in out:
+                error = JSError.TypeError
+            elif res.returncode != 0:
+                error = JSError.Other
+        except subprocess.TimeoutExpired:
+            error = JSError.TimeoutError
 
         data = ShmData.from_buffer(shm.buf)
         exec_data = ExecutionData(
             CoverageData(int(data.num_edges), np.array(data.edges, dtype=np.ubyte)),
             error,
-            out,
+            out if out is not None else "",
         )
 
         del data
