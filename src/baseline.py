@@ -1,18 +1,12 @@
 import logging
 import os
-import random
 import sys
 from itertools import count
 
-import torch
 import tqdm
-from torch import optim
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizerFast
 
 from js_ast.analysis import scope_analysis
-from rl.dqn import DQN, ReplayMemory
-from rl.env import FuzzingAction, FuzzingEnv
-from rl.train import epsilon_greedy, optimise_model, soft_update_params
+from rl.env import FuzzingEnv
 from utils.js_engine import V8Engine
 from utils.loader import get_subtrees, load_corpus
 from utils.logging import setup_logging

@@ -1,8 +1,6 @@
-import logging
 import random
 import time
 from enum import IntEnum
-from functools import reduce
 from pathlib import Path
 from typing import Any, Optional
 
@@ -11,9 +9,8 @@ import numpy as np
 from gymnasium import spaces
 from tqdm import tqdm
 
-from js_ast import escodegen
-from js_ast.mutation import add, remove, replace
 from js_ast.nodes import Node
+from rl.program_state import ProgramState
 from utils.js_engine import CoverageData, Engine, ExecutionData
 
 INTERESTING_FOLDER = Path("corpus/interesting")
@@ -41,35 +38,6 @@ class FuzzingAction(IntEnum):
                 return "Move Down"
             case FuzzingAction.END:
                 return "End"
-
-
-class ProgramState:
-    def __init__(self, program: Node, coverage_data: CoverageData, original_file: str):
-        self.program = program
-        self.coverage_data = coverage_data
-        self.target_node = program
-        self.context_node = program
-        self.original_file = original_file
-        self.history = []
-
-    def generate_code(self, node: Node) -> str:
-        try:
-            return escodegen.generate(node)  # type: ignore
-        except Exception:
-            logging.error("Error generating code")
-            return ""
-
-    def generate_target_code(self) -> str:
-        return self.generate_code(self.target_node)
-
-    def generate_context_code(self) -> str:
-        return self.generate_code(self.context_node)
-
-    def generate_program_code(self) -> str:
-        return self.generate_code(self.program)
-
-    def __str__(self):
-        return self.__repr__()
 
 
 class FuzzingEnv(gym.Env[str, np.int64]):
@@ -169,11 +137,11 @@ class FuzzingEnv(gym.Env[str, np.int64]):
             case FuzzingAction.END:
                 return self._end()
             case FuzzingAction.REPLACE:
-                new_node = self._replace()
+                new_node = self._state.replace(self.subtrees)
             case FuzzingAction.ADD:
-                new_node = self._add()
+                new_node = self._state.add(self.subtrees)
             case FuzzingAction.REMOVE:
-                new_node = self._remove()
+                new_node = self._state.remove()
             case _:
                 raise ValueError(f"Invalid action: {action}")
 
@@ -199,32 +167,18 @@ class FuzzingEnv(gym.Env[str, np.int64]):
         return self._get_obs(), reward, self._get_truncated(), done, self._get_info()
 
     def _move_up(self) -> tuple[str, float, bool, bool, dict[str, Any]]:
-        if self._state.target_node.parent is None:
-            return (
-                self._get_obs(),
-                -1,
-                self._get_truncated(),
-                self._get_done(),
-                self._get_info(),
-            )
-
-        self._state.target_node = self._state.target_node.parent
         return (
             self._get_obs(),
-            0,
+            0 if self._state.move_up() else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),
         )
 
     def _move_down(self) -> tuple[str, float, bool, bool, dict[str, Any]]:
-        children = self._state.target_node.children()
-        if children:
-            self._state.target_node = random.choice(children)
-
         return (
             self._get_obs(),
-            0,
+            0 if self._state.move_down() else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),
@@ -232,12 +186,3 @@ class FuzzingEnv(gym.Env[str, np.int64]):
 
     def _end(self) -> tuple[str, float, bool, bool, dict[str, Any]]:
         return self._get_obs(), 0, True, self._get_done(), self._get_info()
-
-    def _replace(self) -> Node:
-        return replace(self.subtrees, self._state.target_node)
-
-    def _add(self) -> Node:
-        return add(self.subtrees, self._state.target_node)
-
-    def _remove(self) -> Node:
-        return remove(self._state.target_node)

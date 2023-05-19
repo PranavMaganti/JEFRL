@@ -9,7 +9,7 @@ import esprima
 import tqdm
 
 from js_ast.nodes import CallExpression, ExpressionStatement, Node, UnknownNodeTypeError
-from rl.env import ProgramState
+from rl.program_state import ProgramState
 from utils.js_engine import Engine, JSError
 
 
