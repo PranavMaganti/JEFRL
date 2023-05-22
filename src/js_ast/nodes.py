@@ -4,8 +4,9 @@ from __future__ import annotations
 import abc
 import copy
 import dataclasses
+from dataclasses import dataclass
+from dataclasses import field
 import json
-from dataclasses import dataclass, field
 from typing import Any, Generator, Optional, Union
 
 from js_ast.scope import Scope
@@ -100,6 +101,7 @@ class Node(metaclass=abc.ABCMeta):
             # Transform the type into the appropriate class.
             node_class = globals().get(data["type"])
             if not node_class:
+                print(data)
                 raise UnknownNodeTypeError(data["type"])
 
             fields = [
@@ -143,8 +145,7 @@ class Node(metaclass=abc.ABCMeta):
         return children
 
     def root(self) -> Node:
-        """Return the root node of the tre_getattr__(self, name: str):
-        return Nonee."""
+        """Return the root node of the tree."""
         node = self
         while node.parent:
             node = node.parent
@@ -641,6 +642,11 @@ class ImportOrExportDeclaration(Node):
 @dataclass
 class ModuleSpecifier(Node):
     local: Identifier
+
+
+@dataclass
+class Import(Node):
+    pass
 
 
 @dataclass(kw_only=True)

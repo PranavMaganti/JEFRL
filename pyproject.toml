@@ -16,6 +16,7 @@ torch = "^2.0.0"
 strenum = "^0.4.10"
 gymnasium = "^0.28.1"
 esutils = "^1.0.1"
+escodegen = "^1.0.11"
 
 
 [tool.poetry.group.dev.dependencies]

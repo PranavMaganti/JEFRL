@@ -1,21 +1,24 @@
+from collections import defaultdict
 import glob
 import logging
-import pickle
-from collections import defaultdict
 from pathlib import Path
+import pickle
 from typing import Any
 
 import esprima
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import Node
+from js_ast.nodes import UnknownNodeTypeError
+from rl.program_state import ProgramState
 import tqdm
 
-from js_ast.nodes import CallExpression, ExpressionStatement, Node, UnknownNodeTypeError
-from rl.program_state import ProgramState
-from utils.js_engine import Engine, JSError
+from utils.js_engine import Engine
+from utils.js_engine import JSError
 
 
 def load_corpus(engine: Engine) -> list[ProgramState]:
-    path = engine.get_corpus()
-    files = glob.glob(f"{path}/*.js")
+    files = glob.glob(f"{engine.corpus_path}/**/*.js")
     logging.info(f"Found {len(files)} files in corpus")
     corpus: list[ProgramState] = []
 

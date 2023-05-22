@@ -3,22 +3,21 @@ import random
 from re import Pattern
 from typing import Tuple
 
+from js_ast.analysis import fix_node_references
+from js_ast.analysis import scope_analysis
+from js_ast.nodes import AssignmentProperty
+from js_ast.nodes import Expression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import ImportOrExportDeclaration
+from js_ast.nodes import Node
+from js_ast.nodes import Property
+from js_ast.nodes import RestElement
+from js_ast.nodes import SpreadElement
+from js_ast.nodes import Statement
+from js_ast.nodes import SwitchCase
+from js_ast.nodes import VariableDeclarator
 import numpy as np
 
-from js_ast.analysis import fix_node_references, scope_analysis
-from js_ast.nodes import (
-    AssignmentProperty,
-    Expression,
-    ExpressionStatement,
-    ImportOrExportDeclaration,
-    Node,
-    Property,
-    RestElement,
-    SpreadElement,
-    Statement,
-    SwitchCase,
-    VariableDeclarator,
-)
 
 node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
@@ -66,7 +65,7 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
         val = getattr(target.parent, field)
         if isinstance(val, list):
             for i, item in enumerate(val):
-                if item == target:
+                if item is target:
                     val[i] = new_node
                     found = True
                     break
@@ -98,7 +97,7 @@ def remove(target: Node) -> Node:
 
         if isinstance(val, list):
             for i, item in enumerate(val):
-                if item == target:
+                if item is target:
                     if field in non_empty_nodes and len(val) == 1:
                         return target
 
@@ -112,7 +111,7 @@ def remove(target: Node) -> Node:
                     fix_node_references(root)
 
                     return target.parent
-        elif val == target:
+        elif val is target:
             return target
 
     raise ValueError("Could not find target in parent")

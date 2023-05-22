@@ -1,13 +1,11 @@
+from js_ast.nodes import BinaryExpression
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import Identifier
+from js_ast.nodes import Literal
 import pytest
 
-from js_ast.nodes import (
-    BinaryExpression,
-    BlockStatement,
-    CallExpression,
-    ExpressionStatement,
-    Identifier,
-    Literal,
-)
 from utils.loader import sanitise_ast
 
 

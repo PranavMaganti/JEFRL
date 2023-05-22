@@ -1,16 +1,16 @@
+from js_ast.mutation import add
+from js_ast.mutation import remove
+from js_ast.mutation import replace
+from js_ast.nodes import BinaryExpression
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import Identifier
+from js_ast.nodes import Literal
+from js_ast.nodes import VariableDeclaration
+from js_ast.nodes import VariableDeclarator
+from js_ast.scope import Scope
+from js_ast.scope import ScopeType
 import pytest
-
-from js_ast.mutation import add, remove, replace
-from js_ast.nodes import (
-    BinaryExpression,
-    BlockStatement,
-    ExpressionStatement,
-    Identifier,
-    Literal,
-    VariableDeclaration,
-    VariableDeclarator,
-)
-from js_ast.scope import Scope, ScopeType
 
 
 class TestReplace:

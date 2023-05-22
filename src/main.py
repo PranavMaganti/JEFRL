@@ -1,20 +1,31 @@
+# Initial coverage: 14.73665% Final coverage: 14.78238%
+
+from itertools import count
 import logging
 import os
 import sys
-from itertools import count
-
-import torch
-import tqdm
-from torch import optim
-from transformers import RobertaConfig, RobertaModel, RobertaTokenizerFast
+import time
 
 from js_ast.analysis import scope_analysis
-from rl.dqn import DQN, ReplayMemory
-from rl.env import FuzzingAction, FuzzingEnv
-from rl.train import epsilon_greedy, optimise_model, soft_update_params
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
+from rl.env import FuzzingAction
+from rl.env import FuzzingEnv
+from rl.train import epsilon_greedy
+from rl.train import optimise_model
+from rl.train import soft_update_params
+import torch
+from torch import optim
+import tqdm
+from transformers import RobertaConfig
+from transformers import RobertaModel
+from transformers import RobertaTokenizerFast
+
 from utils.js_engine import V8Engine
-from utils.loader import get_subtrees, load_corpus
+from utils.loader import get_subtrees
+from utils.loader import load_corpus
 from utils.logging import setup_logging
+
 
 # System setup
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
@@ -38,7 +49,9 @@ for state in tqdm.tqdm(corpus):
 logging.info("Initialising environment")
 env = FuzzingEnv(corpus, subtrees, 25, engine)
 
-LR = 1e-4  # Learning rate of the AdamW optimizer
+logging.info(f"Initial coverage {env.current_coverage}")
+
+LR = 1e-3  # Learning rate of the AdamW optimizer
 NUM_EPISODES = 10000  # Number of episodes to train the agent for
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -50,7 +63,10 @@ model_name = "huggingface/CodeBERTa-small-v1"
 tokenizer: RobertaTokenizerFast = RobertaTokenizerFast.from_pretrained(model_name)  # type: ignore
 config: RobertaConfig = RobertaConfig.from_pretrained(model_name)  # type: ignore
 code_net: RobertaModel = RobertaModel.from_pretrained(model_name, config=config).to(device)  # type: ignore
-code_lstm = torch.nn.LSTM(768, 768, 1, batch_first=True).to(device)
+
+# Initialise LSTM
+OUTPUT_DIM = 1024
+code_lstm = torch.nn.LSTM(768, OUTPUT_DIM, 1, batch_first=True).to(device)
 
 
 # Check types of the loaded model
@@ -60,7 +76,10 @@ assert isinstance(code_net, RobertaModel)
 
 # Get number of actions from gym action space
 n_actions = len(FuzzingAction)
-n_observations = config.hidden_size
+
+# Number of observations is the size of the hidden state of the LSTM for both
+# the target and context code
+n_observations = OUTPUT_DIM * 2
 
 # Initialise policy and target networks
 logging.info("Initialising policy and target networks")
@@ -77,14 +96,26 @@ memory = ReplayMemory(10000)
 update_count = 0
 
 logging.info("Starting training")
-for ep in range(NUM_EPISODES):
+
+total_time = 30 * 60  # Total time to run the agent for
+start = time.time()
+
+total_steps = 0
+episode_rewards: list[float] = []
+
+# for ep in range(NUM_EPISODES):
+while time.time() - start < total_time:
     state, info = env.reset()
-    t = 0
-    for t in count():
+    done, truncated = False, False
+    episode_reward = 0
+
+    while not done and not truncated:
         action = epsilon_greedy(
-            policy_net, state, code_net, tokenizer, code_lstm, env, t, device
+            policy_net, state, code_net, tokenizer, code_lstm, env, total_steps, device
         )
         next_state, reward, truncated, done, info = env.step(action)
+        total_steps += 1
+        episode_reward += reward
 
         memory.push(state, action, next_state, reward)
         optimise_model(
@@ -99,8 +130,15 @@ for ep in range(NUM_EPISODES):
         )
         soft_update_params(policy_net, target_net)
 
-        if done or truncated:
-            break
-
         state = next_state
         update_count += 1
+
+    episode_rewards.append(episode_reward)
+
+
+logging.info(
+    f"Finished with final coverage: {env.current_coverage}",
+)
+logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
+logging.info(f"Total steps: {env.total_actions}")
+logging.info(f"Total engine executions: {env.total_executions}")

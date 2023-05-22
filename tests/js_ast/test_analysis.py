@@ -1,18 +1,17 @@
 import random
 
-from js_ast.analysis import fix_node_references, scope_analysis
-from js_ast.nodes import (
-    BinaryExpression,
-    BlockStatement,
-    CallExpression,
-    ExpressionStatement,
-    FunctionDeclaration,
-    Identifier,
-    Literal,
-    Program,
-    VariableDeclaration,
-    VariableDeclarator,
-)
+from js_ast.analysis import fix_node_references
+from js_ast.analysis import scope_analysis
+from js_ast.nodes import BinaryExpression
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Identifier
+from js_ast.nodes import Literal
+from js_ast.nodes import Program
+from js_ast.nodes import VariableDeclaration
+from js_ast.nodes import VariableDeclarator
 from js_ast.scope import Scope
 
 

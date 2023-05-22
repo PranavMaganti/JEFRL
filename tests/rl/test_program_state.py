@@ -1,15 +1,15 @@
 from collections import deque
 
-from js_ast.nodes import (
-    BinaryExpression,
-    BlockStatement,
-    ClassBody,
-    ExpressionStatement,
-    FunctionDeclaration,
-    Identifier,
-    Program,
-)
-from rl.program_state import ProgramState, is_context_node
+from js_ast.nodes import BinaryExpression
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import ClassBody
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Identifier
+from js_ast.nodes import Program
+from rl.program_state import is_context_node
+from rl.program_state import ProgramState
+
 from utils.js_engine import CoverageData
 
 

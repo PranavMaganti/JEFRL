@@ -6,5 +6,6 @@ from __future__ import absolute_import
 
 from .esprima import *
 
+
 version = ...
 __version__ = ...

@@ -1,9 +1,19 @@
+from collections import deque
+import copy
 import logging
 import random
-from collections import deque
+from typing import Any
 
-from js_ast.mutation import add, remove, replace
-from js_ast.nodes import BlockStatement, ClassBody, FunctionDeclaration, Node, Program
+import js_ast.escodegen as escodegen
+from js_ast.mutation import add
+from js_ast.mutation import remove
+from js_ast.mutation import replace
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import ClassBody
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Node
+from js_ast.nodes import Program
+
 from utils.js_engine import CoverageData
 
 
@@ -17,14 +27,14 @@ class ProgramState:
         self.context_node: deque[Node] = deque([program])
 
         self.original_file = original_file
-        self.history = []
+        self.history: list[Node] = []
 
     def move_up(self) -> bool:
         if self.target_node.parent is None:
             return False
 
         self.target_node = self.target_node.parent
-        if self.target_node == self.context_node[-1]:
+        if len(self.context_node) > 1 and self.target_node == self.context_node[-1]:
             self.context_node.pop()
 
         return True
@@ -56,6 +66,7 @@ class ProgramState:
         try:
             return escodegen.generate(node)  # type: ignore
         except Exception:
+            print(node)
             logging.error("Error generating code")
             return ""
 
@@ -70,6 +81,16 @@ class ProgramState:
 
     def __str__(self):
         return self.__repr__()
+
+    def __deepcopy__(self, _memo: dict[int, Any]):
+        new = self.__class__(
+            copy.deepcopy(self.program, _memo),
+            self.coverage_data,
+            self.original_file,
+        )
+        new.history = list(self.history)
+
+        return new
 
 
 def is_context_node(node: Node) -> bool:

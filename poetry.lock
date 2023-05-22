@@ -413,6 +413,20 @@ files = [
 ]
 
 [[package]]
+name = "escodegen"
+version = "1.0.11"
+description = "ECMAScript code generator"
+category = "main"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "escodegen-1.0.11-py3-none-any.whl", hash = "sha256:2e46fbbef86faf175165c8ebaa2207b1ee5624918ee9e1daf67fa247d2dbb074"},
+]
+
+[package.dependencies]
+esutils = "*"
+
+[[package]]
 name = "esprima"
 version = "4.0.1"
 description = "ECMAScript parsing infrastructure for multipurpose analysis in Python"
@@ -2024,4 +2038,4 @@ test = ["pytest (>=6.0.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "54b9e792c147bf480c7fc861dece9c6e46f95b89061ddadd01e185153118950c"
+content-hash = "6c10540d118e9d04f038f6bc8c71d6b40b7c864a1e47fcac5ce63655e1ad8bef"

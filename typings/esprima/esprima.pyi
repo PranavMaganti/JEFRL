@@ -17,7 +17,10 @@ __all__ = [
 ]
 from typing import Any, Callable, Optional, Union
 
-from esprima.nodes import Module, Node, Script
+from esprima.nodes import Module
+from esprima.nodes import Node
+from esprima.nodes import Script
+
 
 def parse(code, options=..., delegate=..., **kwargs): ...
 def parseModule(code, options=..., delegate=..., **kwargs): ...

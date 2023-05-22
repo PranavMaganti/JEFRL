@@ -1,22 +1,24 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import (
-    AssignmentPattern,
-    BlockStatement,
-    CallExpression,
-    ClassBody,
-    ClassDeclaration,
-    FunctionDeclaration,
-    Identifier,
-    Literal,
-    Node,
-    Program,
-    VariableDeclaration,
-    VariableDeclarator,
-)
-from js_ast.scope import Scope, ScopeType
-from utils.interesting_values import interesting_floats, interesting_integers
+from js_ast.nodes import AssignmentPattern
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ClassBody
+from js_ast.nodes import ClassDeclaration
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Identifier
+from js_ast.nodes import Literal
+from js_ast.nodes import Node
+from js_ast.nodes import Program
+from js_ast.nodes import UnaryExpression
+from js_ast.nodes import VariableDeclaration
+from js_ast.nodes import VariableDeclarator
+from js_ast.scope import Scope
+from js_ast.scope import ScopeType
+
+from utils.interesting_values import interesting_floats
+from utils.interesting_values import interesting_integers
 
 
 # Calculates variables, classes and functions available at each node and stores it in
@@ -146,9 +148,11 @@ def random_value(scope: Scope, parent: Node):
         else:
             value = random.choice(interesting_floats)
 
-        return Literal(
-            value=value,
-            raw=str(value),
-            parent=parent,
-            scope=scope,
-        )
+        if value < 0:
+            value = -value
+            literal = Literal(value=value, raw=str(value), scope=scope)
+            return UnaryExpression(
+                operator="-", argument=literal, prefix=True, parent=parent, scope=scope
+            )
+
+        return Literal(value=value, raw=str(value), scope=scope)

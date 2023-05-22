@@ -1,17 +1,18 @@
-import random
 from collections import deque
+import random
 from typing import NamedTuple, Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
+
 Transition = NamedTuple(
     "Transition",
     [
-        ("state", str),
+        ("state", tuple[str, str]),
         ("action", np.int64),
-        ("next_state", Optional[str]),
+        ("next_state", Optional[tuple[str, str]]),
         ("reward", float),
     ],
 )
@@ -19,9 +20,9 @@ Transition = NamedTuple(
 BatchTransition = NamedTuple(
     "BatchTransition",
     [
-        ("states", tuple[str]),
+        ("states", tuple[tuple[str, str]]),
         ("actions", tuple[np.int64]),
-        ("next_states", tuple[Optional[str]]),
+        ("next_states", tuple[Optional[tuple[str, str]]]),
         ("rewards", tuple[float]),
     ],
 )
@@ -33,9 +34,9 @@ class ReplayMemory:
 
     def push(
         self,
-        state: str,
+        state: tuple[str, str],
         action: np.int64,
-        next_state: Optional[str],
+        next_state: Optional[tuple[str, str]],
         reward: float,
     ):
         """Save a transition"""
@@ -51,9 +52,9 @@ class ReplayMemory:
 class DQN(torch.nn.Module):
     def __init__(self, n_observations: int, n_actions: int):
         super().__init__()  # type: ignore
-        self.layer1 = torch.nn.Linear(n_observations, 728)
-        self.layer2 = torch.nn.Linear(728, 728)
-        self.layer3 = torch.nn.Linear(728, n_actions)
+        self.layer1 = torch.nn.Linear(n_observations, 1024)
+        self.layer2 = torch.nn.Linear(1024, 512)
+        self.layer3 = torch.nn.Linear(512, n_actions)
 
     def forward(self, x: torch.Tensor):
         x = F.relu(self.layer1(x))

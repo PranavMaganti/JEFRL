@@ -1,18 +1,19 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 import ctypes
+from enum import StrEnum
 import math
+from multiprocessing import shared_memory
 import os
+from pathlib import Path
 import subprocess
 import tempfile
-from abc import ABC, abstractmethod
-from enum import StrEnum
-from multiprocessing import shared_memory
-from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 from numpy.typing import NDArray
+
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
@@ -48,7 +49,7 @@ class CoverageData:
         )
         self.hit_edges: int = np.unpackbits(self.edges).sum()  # type: ignore
 
-    def coverage(self):
+    def coverage(self) -> float:
         return self.hit_edges / self.num_edges if self.num_edges > 0 else 0
 
     def __or__(self, __value: Any) -> CoverageData:
@@ -69,7 +70,7 @@ class CoverageData:
         raise ValueError("Cannot perform bitwise or on CoverageData with given objects")
 
     def __str__(self) -> str:
-        return f"CoverageData({self.coverage()})"
+        return f"{self.coverage():.5%}"
 
     def __eq__(self, __value: object) -> bool:
         if not isinstance(__value, CoverageData):
@@ -78,6 +79,9 @@ class CoverageData:
         return (
             self.edges == __value.edges
         ).all() and self.num_edges == __value.num_edges
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> CoverageData:
+        return CoverageData(self.num_edges, self.edges.copy())
 
 
 class ExecutionData:
@@ -92,19 +96,27 @@ class ExecutionData:
 
 class Engine(ABC):
     def __init__(self) -> None:
-        with open(self.get_corpus_lib(), "r") as f:
+        with open(self.corpus_lib_path, "r") as f:
             self.lib = f.read()
 
+    @property
     @abstractmethod
-    def get_executable(self) -> Path:
+    def executable(self) -> Path:
         pass
 
+    @property
     @abstractmethod
-    def get_corpus(self) -> Path:
+    def args(self) -> list[str]:
         pass
 
+    @property
     @abstractmethod
-    def get_corpus_lib(self) -> Path:
+    def corpus_path(self) -> Path:
+        pass
+
+    @property
+    @abstractmethod
+    def corpus_lib_path(self) -> Path:
         pass
 
     def execute_text(self, code: str) -> Optional[ExecutionData]:
@@ -122,7 +134,7 @@ class Engine(ABC):
 
         try:
             res = subprocess.run(
-                [self.get_executable(), file],
+                [self.executable, *self.args, file],
                 capture_output=True,
                 check=False,
                 timeout=5,
@@ -156,11 +168,26 @@ class Engine(ABC):
 
 
 class V8Engine(Engine):
-    def get_executable(self) -> Path:
+    @property
+    def args(self) -> list[str]:
+        return [
+            "--expose-gc",
+            "--omit-quit",
+            "--allow-natives-syntax",
+            "--fuzzing",
+            # "--jit-fuzzing",
+            "--future",
+            "--harmony",
+        ]
+
+    @property
+    def executable(self) -> Path:
         return ENGINES_DIR / "v8/v8/out/fuzzbuild/d8"
 
-    def get_corpus(self) -> Path:
-        return CORPUS_DIR / "v8"
+    @property
+    def corpus_path(self) -> Path:
+        return CORPUS_DIR / "v8-latest"
 
-    def get_corpus_lib(self) -> Path:
+    @property
+    def corpus_lib_path(self) -> Path:
         return CORPUS_DIR / "libs/v8.js"

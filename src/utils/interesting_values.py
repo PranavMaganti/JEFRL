@@ -1,6 +1,7 @@
 import math
 import sys
 
+
 interesting_integers = [
     -9223372036854775808,
     -9223372036854775807,

@@ -2484,6 +2484,9 @@ class CodeGeneratorExpression:
     def Identifier(self, expr, precedence, flags):
         return generateIdentifier(expr)
 
+    def Import(self, expr, precedence, flags):
+        return ["import"]
+
     def ImportDefaultSpecifier(self, expr, precedence, flags):
         return generateIdentifier(expr.id or expr.local)
 

@@ -1,6 +1,8 @@
 import logging
+from logging import FileHandler
+from logging import LogRecord
+from logging import StreamHandler
 import sys
-from logging import FileHandler, LogRecord, StreamHandler
 
 
 class ConsoleFilter(logging.Filter):

@@ -1,27 +1,34 @@
+import logging
 import math
 import random
+from typing import Iterable
 
 import numpy as np
-import torch
-from torch import nn, optim
-from torch.nn.utils.rnn import pad_sequence
-from transformers import BatchEncoding, RobertaModel, RobertaTokenizerFast
-
-from rl.dqn import DQN, BatchTransition, ReplayMemory
+from rl.dqn import BatchTransition
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
+import torch
+from torch import nn
+from torch import optim
+from torch.nn.utils.rnn import pad_sequence
+from transformers import BatchEncoding
+from transformers import RobertaModel
+from transformers import RobertaTokenizerFast
+
 
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 12  # Number of transitions sampled from the replay buffer
-GAMMA = 0.99  # Discount factor as mentioned in the previous section
+EPS_DECAY = 1000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+BATCH_SIZE = 16  # Number of transitions sampled from the replay buffer
+GAMMA = 0.9  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
 
 # Select action based on epsilon-greedy policy
 def epsilon_greedy(
     policy_net: DQN,
-    state: str,
+    state: tuple[str, str],
     code_net: RobertaModel,
     code_tokenizer: RobertaTokenizerFast,
     code_lstm: nn.LSTM,
@@ -35,11 +42,12 @@ def epsilon_greedy(
         # Sample action from model depending of state
         with torch.no_grad():
             # Get the code snippet embedding
-            state_embedding = code_embedding(
+            state_embedding = target_context_code_embedding(
                 [state], code_net, code_tokenizer, code_lstm, device
             )
             return np.int64(policy_net(state_embedding).argmax().item())
     else:
+        print(f"RANDOM ACTION: {eps_threshold}")
         # Sample random action
         return env.action_space.sample()
 
@@ -78,7 +86,7 @@ def split_tensor_by_mapping(tensor: torch.Tensor, mapping: list[int]) -> torch.T
 # Embed a list of code snippets into a tensor. Handles long code sequences by
 # splitting them into separate sequences and then passing them through an LSTM
 def code_embedding(
-    code: list[str],
+    code: Iterable[str],
     code_net: RobertaModel,
     code_tokenizer: RobertaTokenizerFast,
     code_lstm: nn.LSTM,
@@ -87,7 +95,7 @@ def code_embedding(
     # Tokenize the code, splitting long token sequences into multiple elements
     # of the batch
     tokens: BatchEncoding = code_tokenizer.batch_encode_plus(  # type: ignore
-        code,
+        list(code),
         max_length=512,
         return_tensors="pt",
         return_overflowing_tokens=True,
@@ -95,9 +103,7 @@ def code_embedding(
         truncation=True,
     ).to(device)
 
-    # # Split inputs into several batches if necessary
-    # input_ids = torch.split(tokens["input_ids"], BATCH_SIZE)
-    # attention_mask = torch.split(tokens["attention_mask"], BATCH_SIZE)
+    # Split inputs into several batches if necessary
     input_ids = torch.split(tokens["input_ids"], BATCH_SIZE)
     attention_mask = torch.split(tokens["attention_mask"], BATCH_SIZE)
 
@@ -127,6 +133,24 @@ def code_embedding(
     return lstm_outputs[:, -1, :]
 
 
+def target_context_code_embedding(
+    code: Iterable[tuple[str, str]],
+    code_net: RobertaModel,
+    code_tokenizer: RobertaTokenizerFast,
+    code_lstm: nn.LSTM,
+    device: torch.device,
+):
+    target_code, context_code = zip(*code)
+    target_code_embedding = code_embedding(
+        target_code, code_net, code_tokenizer, code_lstm, device
+    )
+    context_code_embedding = code_embedding(
+        context_code, code_net, code_tokenizer, code_lstm, device
+    )
+
+    return torch.cat((target_code_embedding, context_code_embedding), dim=1)
+
+
 def optimise_model(
     policy_net: DQN,
     target_net: DQN,
@@ -148,27 +172,24 @@ def optimise_model(
     batch = BatchTransition(states, actions, next_states, rewards)  # type: ignore
 
     non_final_mask = torch.tensor(
-        tuple(map(lambda s: s is not None, batch.next_states)),
+        [s is not None for s in batch.next_states],
         device=device,
         dtype=torch.bool,
     )
 
-    state_batch = code_embedding(
-        batch.states,  # type: ignore
-        code_net,
-        code_tokenizer,
-        code_lstm,
-        device,
+    states_batch = target_context_code_embedding(
+        batch.states, code_net, code_tokenizer, code_lstm, device
     )
+
     action_batch = torch.tensor(batch.actions).view(-1, 1).to(device)
     reward_batch = torch.tensor(batch.rewards).to(device)
 
     # Encode the state and get the Q values for the actions taken
-    state_action_values = policy_net(state_batch).gather(1, action_batch)
+    state_action_values = policy_net(states_batch).gather(1, action_batch)
 
     next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
-        non_final_next_states = code_embedding(
+        non_final_next_states = target_context_code_embedding(
             [s for s in batch.next_states if s is not None],
             code_net,
             code_tokenizer,
@@ -186,6 +207,8 @@ def optimise_model(
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
     loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+    logging.info(f"Loss: {loss.item()}")
 
     # Optimize the model
     optimizer.zero_grad()

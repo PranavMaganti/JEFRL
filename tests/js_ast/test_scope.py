@@ -1,4 +1,5 @@
-from js_ast.scope import Scope, ScopeType
+from js_ast.scope import Scope
+from js_ast.scope import ScopeType
 
 
 def test_base_scope():
