@@ -1,6 +1,4 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
-
-from itertools import count
 import logging
 import os
 import sys
@@ -37,7 +35,7 @@ setup_logging()
 # Environment setup
 logging.info("Loading corpus")
 engine = V8Engine()
-corpus = load_corpus(engine)
+corpus, total_coverage = load_corpus(engine)
 
 logging.info("Initialising subtrees")
 subtrees = get_subtrees(corpus)
@@ -47,7 +45,7 @@ for state in tqdm.tqdm(corpus):
     scope_analysis(state.target_node)
 
 logging.info("Initialising environment")
-env = FuzzingEnv(corpus, subtrees, 25, engine)
+env = FuzzingEnv(corpus, subtrees, 25, engine, total_coverage)
 
 logging.info(f"Initial coverage {env.current_coverage}")
 
@@ -103,8 +101,7 @@ start = time.time()
 total_steps = 0
 episode_rewards: list[float] = []
 
-# for ep in range(NUM_EPISODES):
-while time.time() - start < total_time:
+for ep in range(NUM_EPISODES):
     state, info = env.reset()
     done, truncated = False, False
     episode_reward = 0

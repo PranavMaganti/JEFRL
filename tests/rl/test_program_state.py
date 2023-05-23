@@ -10,7 +10,7 @@ from js_ast.nodes import Program
 from rl.program_state import is_context_node
 from rl.program_state import ProgramState
 
-from utils.js_engine import CoverageData
+from utils.js_engine import Coverage
 
 
 class TestIsContextNode:
@@ -55,7 +55,7 @@ class TestIsContextNode:
 class TestProgramState:
     def test_move_up_root_node(self):
         node = Program(body=[], sourceType="script")
-        state = ProgramState(node, coverage_data=CoverageData())
+        state = ProgramState(node, coverage_data=Coverage())
 
         assert not state.move_up()
 
@@ -68,7 +68,7 @@ class TestProgramState:
             generator=False,
         )
         root = Program(body=[parent], sourceType="script")
-        state = ProgramState(root, CoverageData())
+        state = ProgramState(root, Coverage())
 
         state.target_node = node
         state.context_node = deque([root, parent])
@@ -88,7 +88,7 @@ class TestProgramState:
         parent = BlockStatement(body=[node])
         root = Program(body=[parent], sourceType="script")
 
-        state = ProgramState(root, CoverageData())
+        state = ProgramState(root, Coverage())
 
         state.target_node = expr
         state.context_node = deque([root, parent])
@@ -101,7 +101,7 @@ class TestProgramState:
 
     def test_move_down_no_children(self):
         node = BlockStatement(body=[])
-        state = ProgramState(node, CoverageData())
+        state = ProgramState(node, Coverage())
 
         assert not state.move_down()
 
@@ -113,7 +113,7 @@ class TestProgramState:
             generator=False,
         )
         parent = Program(body=[node], sourceType="script")
-        state = ProgramState(parent, CoverageData())
+        state = ProgramState(parent, Coverage())
 
         assert state.move_down()
         assert state.target_node == node
@@ -134,7 +134,7 @@ class TestProgramState:
         )
         node = ExpressionStatement(expression=expr, directive="")
         parent = Program(body=[node], sourceType="script")
-        state = ProgramState(parent, CoverageData())
+        state = ProgramState(parent, Coverage())
 
         assert state.move_down()
         assert state.target_node == node

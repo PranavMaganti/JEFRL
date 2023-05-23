@@ -1,10 +1,8 @@
 from collections import deque
 import copy
-import logging
 import random
 from typing import Any
 
-import js_ast.escodegen as escodegen
 from js_ast.mutation import add
 from js_ast.mutation import remove
 from js_ast.mutation import replace
@@ -14,13 +12,11 @@ from js_ast.nodes import FunctionDeclaration
 from js_ast.nodes import Node
 from js_ast.nodes import Program
 
-from utils.js_engine import CoverageData
+from utils.js_engine import Coverage
 
 
 class ProgramState:
-    def __init__(
-        self, program: Node, coverage_data: CoverageData, original_file: str = ""
-    ):
+    def __init__(self, program: Node, coverage_data: Coverage, original_file: str = ""):
         self.program = program
         self.coverage_data = coverage_data
         self.target_node: Node = program
@@ -62,22 +58,14 @@ class ProgramState:
     def remove(self) -> Node:
         return remove(self.target_node)
 
-    def generate_code(self, node: Node) -> str:
-        try:
-            return escodegen.generate(node)  # type: ignore
-        except Exception:
-            print(node)
-            logging.error("Error generating code")
-            return ""
-
     def generate_target_code(self) -> str:
-        return self.generate_code(self.target_node)
+        return self.target_node.generate_code()
 
     def generate_context_code(self) -> str:
-        return self.generate_code(self.context_node[-1])
+        return self.context_node[-1].generate_code()
 
     def generate_program_code(self) -> str:
-        return self.generate_code(self.program)
+        return self.program.generate_code()
 
     def __str__(self):
         return self.__repr__()

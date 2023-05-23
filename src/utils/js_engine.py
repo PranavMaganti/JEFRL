@@ -39,7 +39,7 @@ class ShmData(ctypes.Structure):
     ]
 
 
-class CoverageData:
+class Coverage:
     def __init__(self, num_edges: int = 0, edges: Optional[NDArray[np.ubyte]] = None):
         self.num_edges = num_edges
         self.edges = (
@@ -52,13 +52,13 @@ class CoverageData:
     def coverage(self) -> float:
         return self.hit_edges / self.num_edges if self.num_edges > 0 else 0
 
-    def __or__(self, __value: Any) -> CoverageData:
-        if not isinstance(__value, CoverageData):
+    def __or__(self, __value: Any) -> Coverage:
+        if not isinstance(__value, Coverage):
             raise TypeError(
                 "Cannot perform bitwise or on CoverageData and " + type(__value)
             )
         if self.num_edges == __value.num_edges:
-            return CoverageData(
+            return Coverage(
                 self.num_edges,
                 self.edges | __value.edges,
             )
@@ -69,25 +69,48 @@ class CoverageData:
 
         raise ValueError("Cannot perform bitwise or on CoverageData with given objects")
 
+    def __and__(self, __value: object):
+        if not isinstance(__value, Coverage):
+            raise TypeError(
+                f"Cannot perform bitwise and on CoverageData and {type(__value)}"
+            )
+
+        if self.num_edges == __value.num_edges:
+            return Coverage(
+                self.num_edges,
+                self.edges & __value.edges,
+            )
+        elif self.num_edges == 0:
+            return __value
+        elif __value.num_edges == 0:
+            return self
+
+        raise ValueError(
+            "Cannot perform bitwise and on CoverageData with given objects"
+        )
+
     def __str__(self) -> str:
         return f"{self.coverage():.5%}"
 
     def __eq__(self, __value: object) -> bool:
-        if not isinstance(__value, CoverageData):
+        if not isinstance(__value, Coverage):
+            return False
+
+        if self.num_edges != __value.num_edges:
             return False
 
         return (
             self.edges == __value.edges
         ).all() and self.num_edges == __value.num_edges
 
-    def __deepcopy__(self, memo: dict[int, Any]) -> CoverageData:
-        return CoverageData(self.num_edges, self.edges.copy())
+    def __deepcopy__(self, memo: dict[int, Any]) -> Coverage:
+        return Coverage(self.num_edges, self.edges.copy())
 
 
 class ExecutionData:
-    def __init__(self, coverage_data: CoverageData, error: JSError, out: str):
+    def __init__(self, coverage: Coverage, error: JSError, out: str):
         self.error = error
-        self.coverage_data = coverage_data
+        self.coverage = coverage
         self.out = out
 
     def is_crash(self):
@@ -154,7 +177,7 @@ class Engine(ABC):
 
         data = ShmData.from_buffer(shm.buf)
         exec_data = ExecutionData(
-            CoverageData(int(data.num_edges), np.array(data.edges, dtype=np.ubyte)),
+            Coverage(int(data.num_edges), np.array(data.edges, dtype=np.ubyte)),
             error,
             out if out is not None else "",
         )

@@ -7,8 +7,10 @@ import dataclasses
 from dataclasses import dataclass
 from dataclasses import field
 import json
+import logging
 from typing import Any, Generator, Optional, Union
 
+import js_ast.escodegen as escodegen
 from js_ast.scope import Scope
 
 
@@ -150,6 +152,14 @@ class Node(metaclass=abc.ABCMeta):
         while node.parent:
             node = node.parent
         return node
+
+    def generate_code(self) -> Optional[str]:
+        try:
+            return escodegen.generate(self)  # type: ignore
+        except Exception:
+            print(self)
+            logging.error("Error generating code")
+            return None
 
     def __repr__(self) -> str:
         """String representation of the node."""

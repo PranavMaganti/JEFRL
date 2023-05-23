@@ -13,7 +13,7 @@ import numpy as np
 from rl.program_state import ProgramState
 from tqdm import tqdm
 
-from utils.js_engine import CoverageData
+from utils.js_engine import Coverage
 from utils.js_engine import Engine
 from utils.js_engine import ExecutionData
 
@@ -54,6 +54,7 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
         subtrees: dict[str, list[Node]],
         max_mutations: int,
         engine: Engine,
+        total_coverage: Coverage,
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
@@ -77,9 +78,7 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
         self.total_executions = 0
         self.total_actions = 0
 
-        self.current_coverage = CoverageData()
-        for state in tqdm(corpus):
-            self.current_coverage |= state.coverage_data
+        self.current_coverage = total_coverage
 
     def save_current_state(self, path: Path):
         with open(path, "w") as f:
@@ -103,11 +102,11 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
             self.save_current_state(INTERESTING_FOLDER / f"{time.time()}_crash.js")
             return 20
 
-        new_coverage = exec_data.coverage_data | self.current_coverage
+        new_coverage = exec_data.coverage | self.current_coverage
 
         # new coverage is the same as the current coverage
         if new_coverage == self.current_coverage:
-            return exec_data.coverage_data.hit_edges / self.current_coverage.hit_edges
+            return exec_data.coverage.hit_edges / self.current_coverage.hit_edges
 
         # new coverage has increased total coverage
         self.coverage_increased = True
@@ -191,7 +190,7 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
         if not exec_data:
             return self._get_obs(), 0, self._get_truncated(), True, self._get_info()
 
-        self._state.coverage_data = exec_data.coverage_data
+        self._state.coverage_data = exec_data.coverage
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
 

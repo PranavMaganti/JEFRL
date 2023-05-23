@@ -424,6 +424,7 @@ def generateNumber(value):
     if math.isnan(value):
         raise Exception("Numeric literal whose value is NaN")
     if value < 0 or (value == 0 and math.copysign(math.inf, value) < 0):
+        print(value)
         raise Exception("Numeric literal whose value is negative")
     if math.isinf(value):
         return json and "null" or (renumber and "1e400" or "1e+400")

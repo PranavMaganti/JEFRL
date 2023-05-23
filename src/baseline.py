@@ -62,7 +62,9 @@ while time.time() - start < total_time:
     logging.info(f"Episode reward: {episode_reward}")
 
 
-logging.info(f"Average episode reward: {sum(episode_rewards) / len(episode_rewards)}")
 logging.info(
     f"Finished baseline with final coverage: {env.current_coverage.coverage() * 100:.5f}%",
 )
+logging.info(f"Average episode reward: {sum(episode_rewards) / len(episode_rewards)}")
+logging.info(f"Total steps: {env.total_actions}")
+logging.info(f"Total engine executions: {env.total_executions}")
