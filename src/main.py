@@ -139,3 +139,4 @@ logging.info(
 logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
 logging.info(f"Total steps: {env.total_actions}")
 logging.info(f"Total engine executions: {env.total_executions}")
+
