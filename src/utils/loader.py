@@ -22,8 +22,9 @@ from utils.js_engine import JSError
 def load_raw_corpus(corpus_path: Path) -> list[Node]:
     nodes: list[Node] = []
 
-    files = glob.glob(f"{corpus_path}/**/*.js")
+    files = list(corpus_path.rglob("*.js"))
     for file in tqdm.tqdm(files):
+        print(file)
         with open(file, "r") as f:
             code = f.read()
 
@@ -120,6 +121,8 @@ def load_ast(code: str, path: Path) -> Optional[Node]:
 
         except (esprima.error_handler.Error, UnknownNodeTypeError):  # type: ignore
             # logging.warning(f"Failed to parse {file}")
+            with open(path, "wb") as f:
+                pickle.dump(None, f)
             return None
 
     return ast
