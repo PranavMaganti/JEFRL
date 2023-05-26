@@ -7,13 +7,16 @@ from transformers import RobertaForMaskedLM, RobertaConfig
 import tqdm
 
 with open("ASTBERTa/vocab.pkl", "rb") as f:
-    vocab = pickle.load(f)
+  vocab = pickle.load(f)
 
 with open("ASTBERTa/frag_to_id.pkl", "rb") as f:
-    frag_to_id = pickle.load(f)
+  frag_to_id = pickle.load(f)
 
 with open("ASTBERTa/data.pkl", "rb") as f:
-    data = pickle.load(f)
+  data = pickle.load(f)
+
+with open("ASTBERTa/frag_type_to_ids.pkl", "rb") as f:
+  frag_type_to_ids = pickle.load(f)
 
 
 PAD_TOKEN = "<PAD>"
@@ -41,52 +44,59 @@ MAX_SEQ_LEN = 1024
 MLM_PROB = 0.15
 
 
-def seq_data_collator(batch: list[list[int]]) -> dict[str, torch.Tensor]:
-    max_len = min(max(map(lambda x: len(x), batch)), MAX_SEQ_LEN)
+def seq_data_collator(batch: list[tuple[list[int], list[str]]]) -> dict[str, torch.Tensor]:
+  seqs, frag_types = zip(*batch)
 
-    padded_seqs: list[list[int]] = []
-    for seq in batch:
-        if len(seq) > max_len:
-            seq = seq[:max_len]
-        padded_seq = seq + [frag_to_id[PAD_TOKEN]] * (max_len - len(seq))
-        padded_seqs.append(padded_seq)
+  max_len = min(max(map(lambda x: len(x), batch)), MAX_SEQ_LEN)
 
-    inputs = torch.tensor(padded_seqs, dtype=torch.long)
-    labels = inputs.clone()
+  padded_seqs: list[list[int]] = []
+  padded_frag_types: list[list[str]] = []
 
-    special_token_mask = torch.zeros_like(labels).float()
-    special_token_mask[(labels >= 0) & (labels <= len(special_tokens))] = 1.0
-    special_token_mask = special_token_mask.bool()
+  for seq, seq_types in zip(seqs, frag_types):
+    if len(seq) > max_len:
+      # start_idx = random.randint(0, len(seq))
+      # length = random.randint(1, max_len)
+      # end_idx = min(start_idx + length, len(seq))
+      seq = seq[:max_len]
+      seq_types = seq_types[:max_len]
 
-    probability_matrix = torch.full(labels.shape, MLM_PROB)
-    probability_matrix.masked_fill_(special_token_mask, value=0.0)
-    masked_indices = torch.bernoulli(probability_matrix).bool()
+    padded_seq = seq + [frag_to_id[PAD_TOKEN]] * (max_len - len(seq))
+    padded_seq_types = seq_types + [PAD_TOKEN] * (max_len - len(seq))
 
-    # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-    indices_replaced = (
-        torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-    )
-    inputs[indices_replaced] = frag_to_id[MASK_TOKEN]
-    labels[~masked_indices] = -100
+    padded_seqs.append(padded_seq)
+    padded_frag_types.append(padded_seq_types)
 
-    # 10% of the time, we replace masked input tokens with random word
-    indices_random = (
-        torch.bernoulli(torch.full(labels.shape, 0.5)).bool()
-        & masked_indices
-        & ~indices_replaced
-    )
-    random_words = torch.randint(len(vocab), labels.shape, dtype=torch.long)
-    inputs[indices_random] = random_words[indices_random]
+  inputs = torch.tensor(padded_seqs, dtype=torch.long)
+  labels = inputs.clone()
 
-    attention_mask = torch.ones_like(inputs, dtype=torch.float)
-    attention_mask[inputs == frag_to_id[PAD_TOKEN]] = 0.0
+  special_token_mask = torch.zeros_like(labels).float()
+  special_token_mask[(labels >= 0) & (labels <= len(special_tokens))] = 1.0
+  special_token_mask = special_token_mask.bool()
 
-    # The rest of the time (10% of the time) we keep the masked input tokens unchanged
-    return {
-        "input_ids": inputs,
-        "labels": labels,
-        "attention_mask": attention_mask,
-    }
+  probability_matrix = torch.full(labels.shape, MLM_PROB)
+  probability_matrix.masked_fill_(special_token_mask, value=0.0)
+  masked_indices = torch.bernoulli(probability_matrix).bool()
+
+  # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+  indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
+  inputs[indices_replaced] = frag_to_id[MASK_TOKEN]
+  labels[~masked_indices] = -100 
+
+  # 10% of the time, we replace masked input tokens with random word
+  indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+  random_words = torch.randint(len(vocab), labels.shape, dtype=torch.long)
+  inputs[indices_random] = random_words[indices_random]
+
+  attention_mask = torch.ones_like(inputs, dtype=torch.float)
+  attention_mask[inputs == frag_to_id[PAD_TOKEN]] = 0.0
+
+  # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+  return {
+      "input_ids": inputs,
+      "labels": labels,
+      "attention_mask": attention_mask,
+      "frag_types": padded_frag_types
+  }
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -145,12 +155,29 @@ def evaluate(model: RobertaForMaskedLM, val_loader: DataLoader[list[int]]):
             attention_mask = batch["attention_mask"].to(device)
 
             out = model(input_ids, attention_mask=attention_mask).logits
-            N, d, C = out.shape
             labels = batch["labels"].to(device)
-            loss = criterion(out.view(N, C, d), labels)
+            N, d, C = out.shape
+            l1 = criterion(out.view(N, C, d), labels)
+
+            labels_mask = batch["labels"] == -100
+
+            top_k_sum = torch.topk(out, top_k, dim=-1).values.sum(dim=-1)
+            type_sum = torch.zeros_like(top_k_sum)
+
+            
+            for i, seq_types in enumerate(batch_types):
+                for j, frag_type in enumerate(seq_types):
+                    target_idx = frag_type_to_ids[frag_type]
+                    type_sum[i, j] = out[i, j, target_idx].sum()
+
+            total_l2 = (top_k_sum - type_sum)
+            total_l2[labels_mask] = 0
+
+            l2 = total_l2.mean() 
+            loss = l1 + l2
             total_loss += loss.item()
 
-    return total_loss / len(val_loader)
+    return total_loss / len(val_loader)    
 
 
 def train(
@@ -167,22 +194,34 @@ def train(
 
     for _ in (pbar := tqdm.trange(epochs)):
         epoch_loss = 0
-        for _, batch in (
-            ibar := tqdm.tqdm(
-                enumerate(train_loader), leave=False, total=len(train_loader)
-            )
-        ):
+        for _, batch in tqdm.tqdm(enumerate(train_loader), leave=False):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
+            batch_types = batch["frag_types"]
 
             optim.zero_grad()
             out = model(input_ids, attention_mask=attention_mask).logits
             labels = batch["labels"].to(device)
             N, d, C = out.shape
-            loss = criterion(out.view(N, C, d), labels)
-            epoch_loss += loss.item()
+            l1 = criterion(out.view(N, C, d), labels)
 
-            ibar.set_postfix({"loss": loss.item()})
+            labels_mask = batch["labels"] == -100
+
+            top_k_sum = torch.topk(out, top_k, dim=-1).values.sum(dim=-1)
+            type_sum = torch.zeros_like(top_k_sum)
+
+            
+            for i, seq_types in enumerate(batch_types):
+                for j, frag_type in enumerate(seq_types):
+                    target_idx = frag_type_to_ids[frag_type]
+                    type_sum[i, j] = out[i, j, target_idx].sum()
+
+            total_l2 = (top_k_sum - type_sum)
+            total_l2[labels_mask] = 0
+
+            l2 = total_l2.mean() 
+            loss = l1 + l2
+            epoch_loss += loss.item()
 
             loss.backward()
             optim.step()
@@ -191,6 +230,7 @@ def train(
         pbar.set_postfix(
             {"val_loss": val_loss, "train_loss": epoch_loss / len(train_loader)}
         )
+
 
 
 train(model, train_loader, val_loader)
