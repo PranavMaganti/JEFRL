@@ -5,6 +5,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from torch.utils.data import DataLoader, Dataset, random_split
+from transformers import RobertaForMaskedLM, RobertaConfig
+import tqdm
 
 with open("ASTBERTa/vocab.pkl", "rb") as f:
     vocab = pickle.load(f)
@@ -89,151 +91,101 @@ def seq_data_collator(batch: list[list[int]]) -> dict[str, torch.Tensor]:
     }
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model)
-        )
-        pe: torch.Tensor = torch.zeros(max_len, 1, d_model)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer("pe", pe)
-
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
-        """
-        x = x + self.pe[: x.size(0)]
-        return self.dropout(x)
-
-
-class TransformerModel(nn.Module):
-    def __init__(
-        self,
-        vocab_size: int,
-        intermediate_size: int,
-        num_attention_heads: int,
-        hidden_size: int,
-        num_layers: int,
-        dropout: float = 0.1,
-        initializer_range: float = 0.02,
-    ):
-        super().__init__()
-        self.model_type = "Transformer"
-        self.pos_encoder = PositionalEncoding(intermediate_size, dropout)
-        encoder_layers = TransformerEncoderLayer(
-            intermediate_size, num_attention_heads, hidden_size, dropout
-        )
-        self.transformer_encoder = TransformerEncoder(encoder_layers, num_layers)
-        self.encoder = nn.Embedding(vocab_size, intermediate_size)
-        self.intermediate_size = intermediate_size
-        self.decoder = nn.Linear(intermediate_size, vocab_size)
-
-        self.initializer_range = initializer_range
-
-        self.init_weights()
-
-    def init_weights(self) -> None:
-        self.encoder.weight.data.uniform_(
-            -self.initializer_range, self.initializer_range
-        )
-        self.decoder.bias.data.zero_()
-        self.decoder.weight.data.uniform_(
-            -self.initializer_range, self.initializer_range
-        )
-
-    def forward(
-        self, src: Tensor, src_mask: Tensor, src_key_padding_mask: Tensor
-    ) -> Tensor:
-        """
-        Arguments:
-            src: Tensor, shape ``[seq_len, batch_size]``
-            src_mask: Tensor, shape ``[seq_len, seq_len]``
-
-        Returns:
-            output Tensor of shape ``[seq_len, batch_size, ntoken]``
-        """
-        src = self.encoder(src) * math.sqrt(self.intermediate_size)
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src, src_mask, src_key_padding_mask)
-        output = self.decoder(output)
-        return output
-
-    def generate_square_subsequent_mask(self, sz: int) -> Tensor:
-        """Generates an upper-triangular matrix of ``-inf``, with zeros on ``diag``."""
-        return torch.triu(torch.ones(sz, sz) * float("-inf"), diagonal=1)
-
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 vocab_size = len(vocab)  # size of vocabulary
-intermediate_size = 3072  # embedding dimension
-hidden_size = 768  # dimension of the feedforward network model in ``nn.TransformerEncoder``
-num_layers = 12  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+intermediate_size = 1200  # embedding dimension
+hidden_size = (
+    300  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+)
+
+num_hidden_layers = (
+    12  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+)
 num_attention_heads = 12  # number of heads in ``nn.MultiheadAttention``
 dropout = 0.1  # dropout probability
 
-batch_size = 32
+batch_size = 16
 
 dataset = FragDataset(data)
 train_split, val_split, test_split = random_split(dataset, [0.8, 0.1, 0.1])
 
-train_loader = DataLoader(train_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator)
-val_loader = DataLoader(val_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator)
-test_loader = DataLoader(test_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator)
+train_loader = DataLoader(
+    train_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
+)
+val_loader = DataLoader(
+    val_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
+)
+test_loader = DataLoader(
+    test_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
+)
+config = RobertaConfig(
+    vocab_size=vocab_size,
+    hidden_size=hidden_size,
+    num_hidden_layers=num_hidden_layers,
+    num_attention_heads=num_attention_heads,
+    intermediate_size=intermediate_size,
+    hidden_dropout_prob=dropout,
+    max_position_embeddings=MAX_SEQ_LEN,
+)
+model = RobertaForMaskedLM(config)
 
-model = TransformerModel(vocab_size, intermediate_size, num_attention_heads, hidden_size, num_layers, dropout).to(device)
-print(f'The model has {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters')
+print(
+    f"The model has {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters"
+)
+print(model)
 
-def evaluate(model: TransformerModel, val_loader: DataLoader[list[int]]):
+
+def evaluate(model: RobertaForMaskedLM, val_loader: DataLoader[list[int]]):
     model.eval()
     criterion = nn.CrossEntropyLoss()
     total_loss = 0
     with torch.no_grad():
         for batch in val_loader:
-            seq_len = batch["input_ids"].shape[1]
-            src_mask = model.generate_square_subsequent_mask(seq_len).to(device)
-            input_ids = batch["input_ids"].T.to(device)
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
 
-            out = model(input_ids, src_mask, batch["attention_mask"].to(device))
+            out = model(input_ids, attention_mask=attention_mask)
             N, d, C = out.shape
-            labels = batch['labels'].T.to(device)
+            labels = batch["labels"].T.to(device)
             loss = criterion(out.view(N, C, d), labels)
             total_loss += loss.item()
-    
-    return total_loss / len(val_loader)
-            
 
-def train(model: TransformerModel, train_loader: DataLoader[list[int]], val_loader: DataLoader[list[int]]):
+    return total_loss / len(val_loader)
+
+
+def train(
+    model: RobertaForMaskedLM,
+    train_loader: DataLoader[list[int]],
+    val_loader: DataLoader[list[int]],
+):
     model.train()
     epochs = 500
     criterion = nn.CrossEntropyLoss()
-    optim = torch.optim.AdamW(model.parameters(), lr=6e-4, eps=1e-6, weight_decay=0.01, betas=(0.9, 0.98))
+    optim = torch.optim.AdamW(
+        model.parameters(), lr=6e-4, eps=1e-6, weight_decay=0.01, betas=(0.9, 0.98)
+    )
 
     for _ in (pbar := tqdm.trange(epochs)):
         epoch_loss = 0
         for _, batch in enumerate(train_loader):
-            seq_len = batch["input_ids"].shape[1]
-            src_mask = model.generate_square_subsequent_mask(seq_len).to(device)
-            input_ids = batch["input_ids"].T.to(device)
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
 
             optim.zero_grad()
-            out = model(input_ids, src_mask, batch["attention_mask"].to(device))
+            out = model(input_ids, attention_mask=attention_mask)
             N, d, C = out.shape
-            labels = batch['labels'].T.to(device)
+            labels = batch["labels"].T.to(device)
             loss = criterion(out.view(N, C, d), labels)
             epoch_loss += loss.item()
 
             loss.backward()
             optim.step()
 
-
         val_loss = evaluate(model, val_loader)
-        pbar.set_postfix({"val_loss": val_loss, "train_loss": epoch_loss / len(train_loader)})
+        pbar.set_postfix(
+            {"val_loss": val_loss, "train_loss": epoch_loss / len(train_loader)}
+        )
+
 
 train(model, train_loader, val_loader)
