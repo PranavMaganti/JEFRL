@@ -1,9 +1,7 @@
-import math
 import pickle
 
 import torch
-from torch import Tensor, nn
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from torch import nn
 from torch.utils.data import DataLoader, Dataset, random_split
 from transformers import RobertaForMaskedLM, RobertaConfig
 import tqdm
@@ -96,16 +94,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 vocab_size = len(vocab)  # size of vocabulary
 intermediate_size = 1200  # embedding dimension
 hidden_size = (
-    300  # dimension of the feedforward network model in ``nn.TransformerEncoder``
+    400  # dimension of the feedforward network model in ``nn.TransformerEncoder``
 )
 
 num_hidden_layers = (
-    12  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
+    8  # number of ``nn.TransformerEncoderLayer`` in ``nn.TransformerEncoder``
 )
-num_attention_heads = 12  # number of heads in ``nn.MultiheadAttention``
+num_attention_heads = 8  # number of heads in ``nn.MultiheadAttention``
 dropout = 0.1  # dropout probability
 
-batch_size = 16
+batch_size = 24
 
 dataset = FragDataset(data)
 train_split, val_split, test_split = random_split(dataset, [0.8, 0.1, 0.1])
@@ -126,9 +124,10 @@ config = RobertaConfig(
     num_attention_heads=num_attention_heads,
     intermediate_size=intermediate_size,
     hidden_dropout_prob=dropout,
-    max_position_embeddings=MAX_SEQ_LEN,
+    max_position_embeddings=MAX_SEQ_LEN + 2,
 )
-model = RobertaForMaskedLM(config)
+model = RobertaForMaskedLM(config).to(device)
+model = torch.nn.DataParallel(model, device_ids=[0, 1])
 
 print(
     f"The model has {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters"
@@ -145,9 +144,9 @@ def evaluate(model: RobertaForMaskedLM, val_loader: DataLoader[list[int]]):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
 
-            out = model(input_ids, attention_mask=attention_mask)
+            out = model(input_ids, attention_mask=attention_mask).logits
             N, d, C = out.shape
-            labels = batch["labels"].T.to(device)
+            labels = batch["labels"].to(device)
             loss = criterion(out.view(N, C, d), labels)
             total_loss += loss.item()
 
@@ -160,7 +159,7 @@ def train(
     val_loader: DataLoader[list[int]],
 ):
     model.train()
-    epochs = 500
+    epochs = 20
     criterion = nn.CrossEntropyLoss()
     optim = torch.optim.AdamW(
         model.parameters(), lr=6e-4, eps=1e-6, weight_decay=0.01, betas=(0.9, 0.98)
@@ -168,16 +167,22 @@ def train(
 
     for _ in (pbar := tqdm.trange(epochs)):
         epoch_loss = 0
-        for _, batch in enumerate(train_loader):
+        for _, batch in (
+            ibar := tqdm.tqdm(
+                enumerate(train_loader), leave=False, total=len(train_loader)
+            )
+        ):
             input_ids = batch["input_ids"].to(device)
             attention_mask = batch["attention_mask"].to(device)
 
             optim.zero_grad()
-            out = model(input_ids, attention_mask=attention_mask)
+            out = model(input_ids, attention_mask=attention_mask).logits
+            labels = batch["labels"].to(device)
             N, d, C = out.shape
-            labels = batch["labels"].T.to(device)
             loss = criterion(out.view(N, C, d), labels)
             epoch_loss += loss.item()
+
+            ibar.set_postfix({"loss": loss.item()})
 
             loss.backward()
             optim.step()
