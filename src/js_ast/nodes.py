@@ -60,7 +60,7 @@ class Node(metaclass=abc.ABCMeta):
     @property
     def fields(self) -> list[str]:
         """list of node fields"""
-        return [
+        return ["type"] + [
             f.name for f in dataclasses.fields(self) if f.name not in context_fields
         ]
 
