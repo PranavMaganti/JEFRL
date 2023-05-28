@@ -23,6 +23,7 @@ escodegen = "^1.0.11"
 black = {version = "^23.1.0", allow-prereleases = true}
 pytest = "^7.2.1"
 ipykernel = "^6.22.0"
+pandas = "^2.0.1"
 
 [build-system]
 requires = ["poetry-core"]
