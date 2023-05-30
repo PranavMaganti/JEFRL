@@ -138,3 +138,5 @@ engines/*
 corpus/**/*.pkl
 corpus/**/*.ast
 corpus/interesting
+
+ASTBERTa/models
