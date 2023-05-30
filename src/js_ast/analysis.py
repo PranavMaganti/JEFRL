@@ -1,7 +1,7 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import AssignmentPattern
+from js_ast.nodes import AssignmentPattern, Statement
 from js_ast.nodes import BlockStatement
 from js_ast.nodes import CallExpression
 from js_ast.nodes import ClassBody
@@ -24,6 +24,9 @@ from utils.interesting_values import interesting_integers
 # Calculates variables, classes and functions available at each node and stores it in
 # a node attribute
 def scope_analysis(node: Node, scope: Optional[Scope] = None):
+    if node.type == "Identifier" or node.type == "Literal":
+        return
+
     if scope is None:
         scope = Scope(scope_type=ScopeType.GLOBAL)
 
@@ -109,16 +112,13 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 # Fixes the node by replacing identifiers and function calls with available variables and
 # functions
 def fix_node_references(node: Node):
-    if not node.scope:
-        print(node)
-        exit(1)
-
-    scope = node.scope
     if isinstance(node, Identifier):
+        scope = node.parent.scope
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 
     elif isinstance(node, CallExpression) and isinstance(node.callee, Identifier):
+        scope = node.scope
         if (
             scope.available_functions()
             and node.callee.name not in scope.available_functions()
@@ -148,7 +148,7 @@ def random_value(scope: Scope, parent: Node):
         else:
             value = random.choice(interesting_floats)
 
-        if value < 0:
+        if value < 0 or str(value).startswith("-"):
             value = -value
             literal = Literal(value=value, raw=str(value), scope=scope)
             return UnaryExpression(
@@ -156,3 +156,12 @@ def random_value(scope: Scope, parent: Node):
             )
 
         return Literal(value=value, raw=str(value), scope=scope)
+
+
+def count_statements(root: Node):
+    count = 0
+    for node in root.traverse():
+        if issubclass(node.__class__, Statement):
+            count += 1
+
+    return count

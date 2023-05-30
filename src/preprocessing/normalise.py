@@ -1,10 +1,10 @@
 from typing import Optional
 
-from js_ast.nodes import MemberExpression, Node
+from js_ast.nodes import Identifier, MemberExpression, Node
 
 
 def is_declared_id(node: Node, prop: Optional[str]) -> bool:
-    if node.type != "Identifier" or node.parent is None:
+    if not isinstance(node, Identifier) or node.parent is None:
         return False
 
     # var, const, let, func
@@ -34,7 +34,6 @@ def collect_id(
     id_cnt: dict[str, int],
     prop: Optional[str] = None,
 ):
-    # Tree traversal
     for field in node.fields:
         val = getattr(node, field)
 
@@ -46,6 +45,8 @@ def collect_id(
                     collect_id(child, id_dict, id_cnt, field)
 
     if node.parent is not None and is_declared_id(node, prop):
+        assert isinstance(node, Identifier)
+
         match node.parent.type:
             case "FunctionDeclaration":
                 id_type = "f"

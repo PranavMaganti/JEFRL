@@ -25,7 +25,7 @@ estree_field_map = {
     "awaitAllowed": "await",
 }
 
-context_fields = {"parent", "scope", "end_scope"}
+context_fields = {"parent", "scope", "end_scope", "origin_file"}
 
 # Set of children fields that should not be children
 non_child_fields = {"id"}
@@ -36,6 +36,7 @@ class Node(metaclass=abc.ABCMeta):
     """Abstract Node class which defines node operations"""
 
     # loc: Optional[dict[str, int]]
+    origin_file: Optional[str] = None
     parent: Optional[Node] = None
     scope: Optional[Scope] = None
     end_scope: Optional[Scope] = None
@@ -89,7 +90,8 @@ class Node(metaclass=abc.ABCMeta):
 
     @staticmethod
     def from_dict(
-        data: Union[None, dict[str, Any], list[dict[str, Any]]]
+        data: Union[None, dict[str, Any], list[dict[str, Any]]],
+        origin_file: Optional[str] = None,
     ) -> Union[None, dict[str, Any], list[Any], Node]:
         """Recursively transform AST data into a Node object."""
         if not isinstance(data, (dict, list)):
@@ -111,7 +113,7 @@ class Node(metaclass=abc.ABCMeta):
                 for f in dataclasses.fields(node_class)
                 if f.name not in context_fields
             ]
-            params: dict[str, Any] = {}
+            params: dict[str, Any] = {"origin_file": origin_file}
 
             for field in fields:
                 data_field = (

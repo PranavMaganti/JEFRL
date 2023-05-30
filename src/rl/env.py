@@ -2,16 +2,20 @@ import copy
 from enum import IntEnum
 import logging
 from pathlib import Path
+import pickle
 import random
 import time
 from typing import Any, Optional
 
 import gymnasium as gym
 from gymnasium import spaces
+import torch
+from js_ast.analysis import count_statements
 from js_ast.nodes import Node
 import numpy as np
 from rl.program_state import ProgramState
 from tqdm import tqdm
+from rl.tokenizer import ASTTokenizer
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine
@@ -19,6 +23,7 @@ from utils.js_engine import ExecutionData
 
 
 INTERESTING_FOLDER = Path("corpus/interesting")
+STATEMENT_PENALTY_WEIGHT = 5
 
 
 class FuzzingAction(IntEnum):
@@ -45,25 +50,27 @@ class FuzzingAction(IntEnum):
                 return "End"
 
 
-class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
+class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     metadata = {}
 
     def __init__(
         self,
         corpus: list[ProgramState],
         subtrees: dict[str, list[Node]],
-        max_mutations: int,
         engine: Engine,
         total_coverage: Coverage,
+        tokenizer: ASTTokenizer,
+        max_mutations: int,
+        max_statements: int = 100,
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
-        self.observation_space = spaces.Tuple(
-            (
-                spaces.Text(max_length=10000),
-                spaces.Text(max_length=10000),
-            )
-        )
+        # self.observation_space = spaces.Tuple(
+        #     (
+        #         spaces.Text(max_length=10000),
+        #         spaces.Text(max_length=10000),
+        #     )
+        # )
         self.render_mode = render_mode
 
         self.corpus = corpus
@@ -73,51 +80,65 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
         self._state: ProgramState
         self.num_mutations = 0  # number of mutations performed
         self.max_mutations = max_mutations  # max number of mutations to perform
+        self.max_statements = max_statements  # max number of statements in a program
+
+        self.total_coverage = total_coverage
         self.coverage_increased = False  # whether coverage has increased
 
         self.total_executions = 0
         self.total_actions = 0
 
-        self.current_coverage = total_coverage
+        self.tokenizer = tokenizer
 
-    def save_current_state(self, path: Path):
-        with open(path, "w") as f:
-            f.write(self._state.generate_program_code())
+    def save_current_state(self, save_type: str):
+        time = int(time.time())
 
-    def _get_obs(self) -> tuple[str, str]:
-        target_obs = self._state.generate_target_code()
-        context_obs = self._state.generate_context_code()
+        code = self._state.generate_program_code()
+        if code is None:
+            return
 
-        return (
-            target_obs if target_obs else " ",
-            context_obs if context_obs else " ",
-        )
+        with open(INTERESTING_FOLDER / f"{time}_{save_type}.js", "w") as f:
+            f.write(code)
+
+        with open(INTERESTING_FOLDER / f"{time}_{save_type}.ast", "wb") as f:
+            pickle.dump(self._state.program, f)
+
+    def _get_obs(self) -> tuple[torch.Tensor, torch.Tensor]:
+        tokenized_target = self.tokenizer.tokenize(self._state.get_target_node())
+        tokenized_context = self.tokenizer.tokenize(self._state.get_context_node())
+        return (tokenized_target, tokenized_context)
 
     def _get_info(self) -> dict[str, str]:
         return {}
 
     def _get_reward(self, exec_data: ExecutionData):
-        if exec_data.is_crash():
-            logging.info(f"Crash detected: {exec_data.out}")
-            self.save_current_state(INTERESTING_FOLDER / f"{time.time()}_crash.js")
-            return 20
+        num_statements = count_statements(self._state.program)
+        penalty = (
+            min(0, 1 - num_statements / self.max_statements) * STATEMENT_PENALTY_WEIGHT
+        )
 
-        new_coverage = exec_data.coverage | self.current_coverage
+        new_coverage = exec_data.coverage | self.total_coverage
+
+        if exec_data.is_crash():
+            self.total_coverage = new_coverage
+            logging.info(f"Crash detected: {exec_data.out}")
+            self.save_current_state("crash")
+            return 20 + penalty
 
         # new coverage is the same as the current coverage
-        if new_coverage == self.current_coverage:
-            return exec_data.coverage.hit_edges / self.current_coverage.hit_edges
+        if new_coverage == self.total_coverage:
+            return (
+                exec_data.coverage.hit_edges / self.total_coverage.hit_edges + penalty
+            )
 
         # new coverage has increased total coverage
         self.coverage_increased = True
-        logging.info(
-            f"Coverage increased from {self.current_coverage} to {new_coverage}"
-        )
-        self.save_current_state(INTERESTING_FOLDER / f"{time.time()}.js")
+        logging.info(f"Coverage increased from {self.total_coverage} to {new_coverage}")
+        self.save_current_state("coverage")
         self.corpus.append(self._state)
-        self.current_coverage = new_coverage
+        self.total_coverage = new_coverage
 
-        return 10
+        return 10 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()
@@ -130,7 +151,7 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[tuple[str, str], dict[str, Any]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], dict[str, Any]]:
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
 
@@ -150,7 +171,7 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
 
     def step(
         self, action: np.int64
-    ) -> tuple[tuple[str, str], float, bool, bool, dict[str, Any]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         logging.info(
             f"Number of mutations: {self.num_mutations}, action: {FuzzingAction(action)}"
         )
@@ -184,19 +205,30 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
             )
 
         self._state.target_node = new_node
-        exec_data = self.engine.execute_text(self._state.generate_program_code())
+        code = self._state.generate_program_code()
+        if not code:
+            return (
+                self._get_obs(),
+                -1,
+                self._get_truncated(),
+                self._get_done(),
+                self._get_info(),
+            )
+        exec_data = self.engine.execute_text(code)
         self.total_executions += 1
 
         if not exec_data:
             return self._get_obs(), 0, self._get_truncated(), True, self._get_info()
 
-        self._state.coverage_data = exec_data.coverage
+        self._state.coverage = exec_data.coverage
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
 
         return self._get_obs(), reward, self._get_truncated(), done, self._get_info()
 
-    def _move_up(self) -> tuple[tuple[str, str], float, bool, bool, dict[str, Any]]:
+    def _move_up(
+        self,
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
             0 if self._state.move_up() else -1,
@@ -205,7 +237,9 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
             self._get_info(),
         )
 
-    def _move_down(self) -> tuple[tuple[str, str], float, bool, bool, dict[str, Any]]:
+    def _move_down(
+        self,
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
             0 if self._state.move_down() else -1,
@@ -214,7 +248,9 @@ class FuzzingEnv(gym.Env[tuple[str, str], np.int64]):
             self._get_info(),
         )
 
-    def _end(self) -> tuple[tuple[str, str], float, bool, bool, dict[str, Any]]:
+    def _end(
+        self,
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
             0 if self.coverage_increased else -5,

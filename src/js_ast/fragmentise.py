@@ -22,8 +22,9 @@ def node_to_frags(
     """
     Converts a js_ast Node into a list of fragments of height 1
     """
+
     if stack is None:
-        stack = [(-1, "Program")]
+        stack = [(-1, node.type)]
 
     # Append the node before visiting its children
     frag: dict[str, Any] = dict()

@@ -139,4 +139,5 @@ corpus/**/*.pkl
 corpus/**/*.ast
 corpus/interesting
 
-ASTBERTa/models
+ASTBERTa/**
+data/**

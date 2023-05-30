@@ -10,9 +10,9 @@ import torch.nn.functional as F
 Transition = NamedTuple(
     "Transition",
     [
-        ("state", tuple[str, str]),
+        ("state", tuple[torch.Tensor, torch.Tensor]),
         ("action", np.int64),
-        ("next_state", Optional[tuple[str, str]]),
+        ("next_state", Optional[tuple[torch.Tensor, torch.Tensor]]),
         ("reward", float),
     ],
 )
@@ -20,9 +20,9 @@ Transition = NamedTuple(
 BatchTransition = NamedTuple(
     "BatchTransition",
     [
-        ("states", tuple[tuple[str, str]]),
+        ("states", tuple[tuple[torch.Tensor, torch.Tensor]]),
         ("actions", tuple[np.int64]),
-        ("next_states", tuple[Optional[tuple[str, str]]]),
+        ("next_states", tuple[Optional[tuple[torch.Tensor, torch.Tensor]]]),
         ("rewards", tuple[float]),
     ],
 )
@@ -34,9 +34,9 @@ class ReplayMemory:
 
     def push(
         self,
-        state: tuple[str, str],
+        state: tuple[torch.Tensor, torch.Tensor],
         action: np.int64,
-        next_state: Optional[tuple[str, str]],
+        next_state: Optional[tuple[torch.Tensor, torch.Tensor]],
         reward: float,
     ):
         """Save a transition"""
@@ -52,11 +52,13 @@ class ReplayMemory:
 class DQN(torch.nn.Module):
     def __init__(self, n_observations: int, n_actions: int):
         super().__init__()  # type: ignore
-        self.layer1 = torch.nn.Linear(n_observations, 1024)
-        self.layer2 = torch.nn.Linear(1024, 512)
-        self.layer3 = torch.nn.Linear(512, n_actions)
+        self.layer1 = torch.nn.Linear(n_observations, 2048)
+        self.layer2 = torch.nn.Linear(2048, 1024)
+        self.layer3 = torch.nn.Linear(1024, 512)
+        self.layer4 = torch.nn.Linear(512, n_actions)
 
     def forward(self, x: torch.Tensor):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
-        return self.layer3(x)
+        x = F.relu(self.layer3(x))
+        return self.layer4(x)

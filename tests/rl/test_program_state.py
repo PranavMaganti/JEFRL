@@ -55,7 +55,7 @@ class TestIsContextNode:
 class TestProgramState:
     def test_move_up_root_node(self):
         node = Program(body=[], sourceType="script")
-        state = ProgramState(node, coverage_data=Coverage())
+        state = ProgramState(node, coverage=Coverage())
 
         assert not state.move_up()
 

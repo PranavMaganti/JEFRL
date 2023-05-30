@@ -1,28 +1,21 @@
-from collections import deque
 import copy
 import random
-from typing import Any
+from collections import deque
+from typing import Any, Optional
+from js_ast.analysis import count_statements
 
-from js_ast.mutation import add
-from js_ast.mutation import remove
-from js_ast.mutation import replace
-from js_ast.nodes import BlockStatement
-from js_ast.nodes import ClassBody
-from js_ast.nodes import FunctionDeclaration
-from js_ast.nodes import Node
-from js_ast.nodes import Program
-
+from js_ast.mutation import add, remove, replace
+from js_ast.nodes import BlockStatement, ClassBody, FunctionDeclaration, Node, Program
 from utils.js_engine import Coverage
 
 
 class ProgramState:
-    def __init__(self, program: Node, coverage_data: Coverage, original_file: str = ""):
+    def __init__(self, program: Node, coverage: Coverage):
         self.program = program
-        self.coverage_data = coverage_data
+        self.coverage = coverage
         self.target_node: Node = program
         self.context_node: deque[Node] = deque([program])
 
-        self.original_file = original_file
         self.history: list[Node] = []
 
     def move_up(self) -> bool:
@@ -58,13 +51,13 @@ class ProgramState:
     def remove(self) -> Node:
         return remove(self.target_node)
 
-    def generate_target_code(self) -> str:
-        return self.target_node.generate_code()
+    def get_target_node(self) -> Node:
+        return self.target_node
 
-    def generate_context_code(self) -> str:
-        return self.context_node[-1].generate_code()
+    def get_context_node(self) -> Node:
+        return self.context_node[-1]
 
-    def generate_program_code(self) -> str:
+    def generate_program_code(self) -> Optional[str]:
         return self.program.generate_code()
 
     def __str__(self):
@@ -73,8 +66,7 @@ class ProgramState:
     def __deepcopy__(self, _memo: dict[int, Any]):
         new = self.__class__(
             copy.deepcopy(self.program, _memo),
-            self.coverage_data,
-            self.original_file,
+            self.coverage,
         )
         new.history = list(self.history)
 
