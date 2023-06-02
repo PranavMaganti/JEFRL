@@ -1,6 +1,8 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
+from datetime import datetime
 import logging
 import os
+from pathlib import Path
 import pickle
 import sys
 import time
@@ -106,8 +108,13 @@ memory = ReplayMemory(10000)
 update_count = 0
 
 # Setup environment
+start = datetime.now()
+save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
+
 logging.info("Setting up environment")
 MAX_MUTATION_STEPS_PER_EPISODE = 25
+INTERESTING_FOLDER = Path("corpus/interesting")
+
 engine = V8Engine()
 env = FuzzingEnv(
     corpus,
@@ -115,7 +122,7 @@ env = FuzzingEnv(
     engine,
     total_coverage,
     tokenizer,
-    MAX_MUTATION_STEPS_PER_EPISODE,
+    INTERESTING_FOLDER / save_folder_name,
 )
 
 logging.info("Starting training")
@@ -123,40 +130,51 @@ logging.info("Starting training")
 total_steps = 0
 episode_rewards: list[float] = []
 
-for ep in range(NUM_EPISODES):
-    state, info = env.reset()
-    done, truncated = False, False
-    episode_reward = 0
 
-    while not done and not truncated:
-        action = epsilon_greedy(
-            policy_net, state, ast_net, tokenizer, env, total_steps, device
-        )
-        next_state, reward, truncated, done, info = env.step(action)
-        total_steps += 1
-        episode_reward += reward
+try:
+    for ep in range(NUM_EPISODES):
+        state, info = env.reset()
+        done, truncated = False, False
+        episode_reward = 0
 
-        memory.push(state, action, next_state, reward)
-        optimise_model(
-            policy_net,
-            target_net,
-            ast_net,
-            tokenizer,
-            optimizer,
-            memory,
-            batch_size=32,
-            device=device,
-        )
-        soft_update_params(policy_net, target_net)
+        while not done and not truncated:
+            action = epsilon_greedy(
+                policy_net, state, ast_net, tokenizer, env, total_steps, device
+            )
+            next_state, reward, truncated, done, info = env.step(action)
+            total_steps += 1
+            episode_reward += reward
 
-        state = next_state
-        update_count += 1
+            memory.push(state, action, next_state, reward)
+            optimise_model(
+                policy_net,
+                target_net,
+                ast_net,
+                tokenizer,
+                optimizer,
+                memory,
+                batch_size=32,
+                device=device,
+            )
+            soft_update_params(policy_net, target_net)
 
-    episode_rewards.append(episode_reward)
+            state = next_state
+            update_count += 1
 
+        episode_rewards.append(episode_reward)
+except Exception as e:
+    print(e)
+
+end = datetime.now()
+
+save_folder = Path("models") / save_folder_name
+os.makedirs(save_folder, exist_ok=True)
+
+torch.save(ast_net, save_folder / "ast_net.pt")
+torch.save(policy_net, save_folder / "policy_net.pt")
 
 logging.info(
-    f"Finished with final coverage: {env.total_coverage} in {time.time() - start}",
+    f"Finished with final coverage: {env.total_coverage} in {end - start}",
 )
 logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
 logging.info(f"Total steps: {env.total_actions}")

@@ -1,6 +1,7 @@
 import copy
 from enum import IntEnum
 import logging
+import os
 from pathlib import Path
 import pickle
 import random
@@ -22,7 +23,6 @@ from utils.js_engine import Engine
 from utils.js_engine import ExecutionData
 
 
-INTERESTING_FOLDER = Path("corpus/interesting")
 STATEMENT_PENALTY_WEIGHT = 5
 
 
@@ -60,7 +60,8 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         engine: Engine,
         total_coverage: Coverage,
         tokenizer: ASTTokenizer,
-        max_mutations: int,
+        interesting_folder: Path,
+        max_mutations: int = 25,
         max_statements: int = 100,
         render_mode: Optional[str] = None,
     ):
@@ -77,6 +78,9 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self.subtrees = subtrees
         self.engine = engine
 
+        self.interesting_folder = interesting_folder
+        os.makedirs(self.interesting_folder, exist_ok=True)
+
         self._state: ProgramState
         self.num_mutations = 0  # number of mutations performed
         self.max_mutations = max_mutations  # max number of mutations to perform
@@ -91,16 +95,18 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self.tokenizer = tokenizer
 
     def save_current_state(self, save_type: str):
-        time = int(time.time())
+        current_time = int(time.time())
 
         code = self._state.generate_program_code()
         if code is None:
             return
 
-        with open(INTERESTING_FOLDER / f"{time}_{save_type}.js", "w") as f:
+        with open(self.interesting_folder / f"{current_time}_{save_type}.js", "w") as f:
             f.write(code)
 
-        with open(INTERESTING_FOLDER / f"{time}_{save_type}.ast", "wb") as f:
+        with open(
+            self.interesting_folder / f"{current_time}_{save_type}.ast", "wb"
+        ) as f:
             pickle.dump(self._state.program, f)
 
     def _get_obs(self) -> tuple[torch.Tensor, torch.Tensor]:

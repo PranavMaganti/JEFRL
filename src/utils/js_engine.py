@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import ctypes
-from enum import StrEnum
+from enum import Enum
 import math
 from multiprocessing import shared_memory
 import os
@@ -23,7 +23,7 @@ ENGINES_DIR = Path("engines")
 CORPUS_DIR = Path("corpus")
 
 
-class JSError(StrEnum):
+class JSError(str, Enum):
     ReferenceError = "ReferenceError"
     SyntaxError = "SyntaxError"
     TypeError = "TypeError"
