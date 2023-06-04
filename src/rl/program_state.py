@@ -1,10 +1,17 @@
+from collections import deque
 import copy
 import random
-from collections import deque
 from typing import Any, Optional
 
-from js_ast.mutation import add, remove, replace
-from js_ast.nodes import BlockStatement, ClassBody, FunctionDeclaration, Node, Program
+from js_ast.mutation import add
+from js_ast.mutation import remove
+from js_ast.mutation import replace
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import ClassBody
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Node
+from js_ast.nodes import Program
+
 from utils.js_engine import ExecutionData
 
 

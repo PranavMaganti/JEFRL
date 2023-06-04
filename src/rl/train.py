@@ -3,13 +3,16 @@ import math
 import random
 
 import numpy as np
-import torch
-from torch import nn, optim
-from transformers import RobertaModel
-
-from rl.dqn import DQN, BatchTransition, ReplayMemory
+from rl.dqn import BatchTransition
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
+import torch
+from torch import nn
+from torch import optim
+from transformers import RobertaModel
+
 
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05

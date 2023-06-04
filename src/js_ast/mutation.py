@@ -2,23 +2,22 @@ import copy
 import random
 from typing import Tuple
 
+from js_ast.analysis import fix_node_references
+from js_ast.analysis import scope_analysis
+from js_ast.nodes import AssignmentProperty
+from js_ast.nodes import Expression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import ImportOrExportDeclaration
+from js_ast.nodes import Node
+from js_ast.nodes import Pattern
+from js_ast.nodes import Property
+from js_ast.nodes import RestElement
+from js_ast.nodes import SpreadElement
+from js_ast.nodes import Statement
+from js_ast.nodes import SwitchCase
+from js_ast.nodes import VariableDeclarator
 import numpy as np
 
-from js_ast.analysis import fix_node_references, scope_analysis
-from js_ast.nodes import (
-    AssignmentProperty,
-    Expression,
-    ExpressionStatement,
-    ImportOrExportDeclaration,
-    Node,
-    Pattern,
-    Property,
-    RestElement,
-    SpreadElement,
-    Statement,
-    SwitchCase,
-    VariableDeclarator,
-)
 
 node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),

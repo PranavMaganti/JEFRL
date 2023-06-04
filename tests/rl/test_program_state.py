@@ -10,7 +10,9 @@ from js_ast.nodes import Program
 from rl.program_state import is_context_node
 from rl.program_state import ProgramState
 
-from utils.js_engine import Coverage, ExecutionData, JSError
+from utils.js_engine import Coverage
+from utils.js_engine import ExecutionData
+from utils.js_engine import JSError
 
 
 class TestIsContextNode:

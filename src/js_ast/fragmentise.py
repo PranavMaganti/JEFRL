@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from js_ast.nodes import Node
 
+
 TERM_TYPE = [
     "DebuggerStatement",
     "ThisExpression",

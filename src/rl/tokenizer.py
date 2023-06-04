@@ -1,8 +1,10 @@
 from typing import Any, Iterable
 
-import torch
-from js_ast.fragmentise import hash_frag, node_to_frags
+from js_ast.fragmentise import hash_frag
+from js_ast.fragmentise import node_to_frags
 from js_ast.nodes import Node
+import torch
+
 
 PAD_TOKEN = "<pad>"
 CLS_TOKEN = "<s>"

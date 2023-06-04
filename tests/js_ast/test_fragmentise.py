@@ -1,7 +1,7 @@
 from typing import Any
+
 import esprima
 from js_ast.fragmentise import node_to_frags
-
 from js_ast.nodes import Node
 
 
@@ -83,7 +83,12 @@ class TestMakeFrags:
         frag_seq: list[dict[str, Any]] = []
         frag_info_seq: list[tuple[int, str]] = []
         node_types: set[str] = set()
-        node_to_frags(node, frag_seq, frag_info_seq, node_types, )
+        node_to_frags(
+            node,
+            frag_seq,
+            frag_info_seq,
+            node_types,
+        )
 
         print(frag_seq)
 

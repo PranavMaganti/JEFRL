@@ -1,6 +1,8 @@
 from typing import Tuple
-import tqdm
+
 from rl.program_state import ProgramState
+import tqdm
+
 from utils.js_engine import Coverage
 
 

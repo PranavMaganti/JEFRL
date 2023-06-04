@@ -1,6 +1,8 @@
 from typing import Optional
 
-from js_ast.nodes import Identifier, MemberExpression, Node
+from js_ast.nodes import Identifier
+from js_ast.nodes import MemberExpression
+from js_ast.nodes import Node
 
 
 def is_declared_id(node: Node, prop: Optional[str]) -> bool:

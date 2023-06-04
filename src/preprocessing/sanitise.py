@@ -1,6 +1,9 @@
 # Remove all assert statements from the AST
 from typing import Any
-from js_ast.nodes import CallExpression, ExpressionStatement, Node
+
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import Node
 
 
 def sanitise_ast(ast: Node):

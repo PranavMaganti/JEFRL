@@ -1,26 +1,28 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import (
-    ArrowFunctionExpression,
-    AssignmentPattern,
-    BlockStatement,
-    CallExpression,
-    ClassBody,
-    ClassDeclaration,
-    FunctionDeclaration,
-    FunctionExpression,
-    Identifier,
-    Literal,
-    Node,
-    Program,
-    Statement,
-    UnaryExpression,
-    VariableDeclaration,
-    VariableDeclarator,
-)
-from js_ast.scope import Scope, ScopeType
-from utils.interesting_values import interesting_floats, interesting_integers
+from js_ast.nodes import ArrowFunctionExpression
+from js_ast.nodes import AssignmentPattern
+from js_ast.nodes import BlockStatement
+from js_ast.nodes import CallExpression
+from js_ast.nodes import ClassBody
+from js_ast.nodes import ClassDeclaration
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import FunctionExpression
+from js_ast.nodes import Identifier
+from js_ast.nodes import Literal
+from js_ast.nodes import Node
+from js_ast.nodes import Program
+from js_ast.nodes import Statement
+from js_ast.nodes import UnaryExpression
+from js_ast.nodes import VariableDeclaration
+from js_ast.nodes import VariableDeclarator
+from js_ast.scope import Scope
+from js_ast.scope import ScopeType
+
+from utils.interesting_values import interesting_floats
+from utils.interesting_values import interesting_integers
+
 
 INBUILT_FUNCTIONS = set("gc")
 
@@ -113,9 +115,12 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
                     current_scope = current_scope.parent
 
                 current_scope.variables.add(node.id.name)
+                if node.init and isinstance(
+                    node.init, (FunctionExpression, ArrowFunctionExpression)
+                ):
+                    current_scope.parent_functions[node.id.name] = len(node.init.params)
             else:
                 scope.variables.add(node.id.name)
-
                 # Add variable functions to scope functions
                 if node.init and isinstance(
                     node.init, (FunctionExpression, ArrowFunctionExpression)

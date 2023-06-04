@@ -1,7 +1,9 @@
-from js_ast.nodes import Node
-from preprocessing.normalise import collect_id, is_declared_id, normalize_id
 import esprima
 from js_ast import escodegen
+from js_ast.nodes import Node
+from preprocessing.normalise import collect_id
+from preprocessing.normalise import is_declared_id
+from preprocessing.normalise import normalize_id
 
 
 class TestIsDeclaredId:
