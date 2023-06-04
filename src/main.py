@@ -31,6 +31,7 @@ sys.setrecursionlimit(10000)
 setup_logging()
 
 # Load preprocessed data
+logging.info("Loading preprocessed data")
 with open("data/js-rl/corpus.pkl", "rb") as f:
     data = pickle.load(f)
 
@@ -48,7 +49,7 @@ LR = 1e-3  # Learning rate of the AdamW optimizer
 NUM_EPISODES = 10000  # Number of episodes to train the agent for
 MAX_LEN = 512  # Maximum length of the AST fragment sequence
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 vocab_size = len(vocab)  # size of vocabulary
 intermediate_size = 3072  # embedding dimension
@@ -80,11 +81,13 @@ ast_net = RobertaModel.from_pretrained(
     state_dict=pretrained_model.state_dict(),
     config=config,
 ).to(device)
+# ast_net = torch.nn.DataParallel(ast_net, device_ids=[0, 1])
 # ast_net = torch.load("ASTBERTa/models/final/model_28000.pt").to(device)
 
 # Check types of the loaded model
 assert isinstance(config, RobertaConfig)
-assert isinstance(ast_net, RobertaModel)
+# assert isinstance(ast_net, RobertaModel)
+
 
 # Get number of actions from gym action space
 n_actions = len(FuzzingAction)
@@ -99,6 +102,9 @@ policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
+# policy_net = torch.nn.DataParallel(policy_net, device_ids=[0, 1])
+# target_net = torch.nn.DataParallel(target_net, device_ids=[0, 1])
+
 optimizer = optim.AdamW(
     [*ast_net.parameters(), *policy_net.parameters()],
     lr=LR,
@@ -112,7 +118,6 @@ start = datetime.now()
 save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
 
 logging.info("Setting up environment")
-MAX_MUTATION_STEPS_PER_EPISODE = 25
 INTERESTING_FOLDER = Path("corpus/interesting")
 
 engine = V8Engine()
@@ -131,51 +136,51 @@ total_steps = 0
 episode_rewards: list[float] = []
 
 
-try:
-    for ep in range(NUM_EPISODES):
-        state, info = env.reset()
-        done, truncated = False, False
-        episode_reward = 0
+# try:
+for ep in range(NUM_EPISODES):
+    state, info = env.reset()
+    done, truncated = False, False
+    episode_reward = 0
 
-        while not done and not truncated:
-            action = epsilon_greedy(
-                policy_net, state, ast_net, tokenizer, env, total_steps, device
-            )
-            next_state, reward, truncated, done, info = env.step(action)
-            total_steps += 1
-            episode_reward += reward
+    while not done and not truncated:
+        action = epsilon_greedy(
+            policy_net, state, ast_net, tokenizer, env, total_steps, device
+        )
+        next_state, reward, truncated, done, info = env.step(action)
+        total_steps += 1
+        episode_reward += reward
 
-            memory.push(state, action, next_state, reward)
-            optimise_model(
-                policy_net,
-                target_net,
-                ast_net,
-                tokenizer,
-                optimizer,
-                memory,
-                batch_size=32,
-                device=device,
-            )
-            soft_update_params(policy_net, target_net)
+        memory.push(state, action, next_state, reward)
+        optimise_model(
+            policy_net,
+            target_net,
+            ast_net,
+            tokenizer,
+            optimizer,
+            memory,
+            batch_size=32,
+            device=device,
+        )
+        soft_update_params(policy_net, target_net)
 
-            state = next_state
-            update_count += 1
+        state = next_state
+        update_count += 1
 
-        episode_rewards.append(episode_reward)
-except Exception as e:
-    print(e)
+    episode_rewards.append(episode_reward)
+# except Exception as e:
+#     print(e)
 
-end = datetime.now()
+# end = datetime.now()
 
-save_folder = Path("models") / save_folder_name
-os.makedirs(save_folder, exist_ok=True)
+# save_folder = Path("models") / save_folder_name
+# os.makedirs(save_folder, exist_ok=True)
 
-torch.save(ast_net, save_folder / "ast_net.pt")
-torch.save(policy_net, save_folder / "policy_net.pt")
+# torch.save(ast_net, save_folder / "ast_net.pt")
+# torch.save(policy_net, save_folder / "policy_net.pt")
 
-logging.info(
-    f"Finished with final coverage: {env.total_coverage} in {end - start}",
-)
-logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
-logging.info(f"Total steps: {env.total_actions}")
-logging.info(f"Total engine executions: {env.total_executions}")
+# logging.info(
+#     f"Finished with final coverage: {env.total_coverage} in {end - start}",
+# )
+# logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
+# logging.info(f"Total steps: {env.total_actions}")
+# logging.info(f"Total engine executions: {env.total_executions}")

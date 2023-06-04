@@ -109,6 +109,11 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         ) as f:
             pickle.dump(self._state.program, f)
 
+        with open(
+            self.interesting_folder / f"{current_time}_{save_type}.txt", "w"
+        ) as f:
+            f.write(self._state.exec_data.out)
+
     def _get_obs(self) -> tuple[torch.Tensor, torch.Tensor]:
         tokenized_target = self.tokenizer.tokenize(self._state.get_target_node())
         tokenized_context = self.tokenizer.tokenize(self._state.get_context_node())
@@ -226,7 +231,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         if not exec_data:
             return self._get_obs(), 0, self._get_truncated(), True, self._get_info()
 
-        self._state.coverage = exec_data.coverage
+        self._state.exec_data = exec_data
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
 

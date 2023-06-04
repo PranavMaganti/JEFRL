@@ -69,7 +69,7 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
             failed_parse += 1
             continue
 
-        corpus.append(ProgramState(ast, exec_data.coverage))
+        corpus.append(ProgramState(ast, exec_data))
 
     logging.info(f"Failed to execute {failed_exec} files")
     logging.info(f"Failed to parse {failed_parse} files")

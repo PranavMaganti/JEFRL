@@ -1,24 +1,28 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import AssignmentPattern, Statement
-from js_ast.nodes import BlockStatement
-from js_ast.nodes import CallExpression
-from js_ast.nodes import ClassBody
-from js_ast.nodes import ClassDeclaration
-from js_ast.nodes import FunctionDeclaration
-from js_ast.nodes import Identifier
-from js_ast.nodes import Literal
-from js_ast.nodes import Node
-from js_ast.nodes import Program
-from js_ast.nodes import UnaryExpression
-from js_ast.nodes import VariableDeclaration
-from js_ast.nodes import VariableDeclarator
-from js_ast.scope import Scope
-from js_ast.scope import ScopeType
+from js_ast.nodes import (
+    ArrowFunctionExpression,
+    AssignmentPattern,
+    BlockStatement,
+    CallExpression,
+    ClassBody,
+    ClassDeclaration,
+    FunctionDeclaration,
+    FunctionExpression,
+    Identifier,
+    Literal,
+    Node,
+    Program,
+    Statement,
+    UnaryExpression,
+    VariableDeclaration,
+    VariableDeclarator,
+)
+from js_ast.scope import Scope, ScopeType
+from utils.interesting_values import interesting_floats, interesting_integers
 
-from utils.interesting_values import interesting_floats
-from utils.interesting_values import interesting_integers
+INBUILT_FUNCTIONS = set("gc")
 
 
 # Calculates variables, classes and functions available at each node and stores it in
@@ -99,11 +103,24 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
                     current_scope.scope_type == ScopeType.BLOCK and current_scope.parent
                 ):
                     current_scope.parent_variables.add(node.id.name)
+                    # Add variable functions to scope functions
+                    if node.init and isinstance(
+                        node.init, (FunctionExpression, ArrowFunctionExpression)
+                    ):
+                        current_scope.parent_functions[node.id.name] = len(
+                            node.init.params
+                        )
                     current_scope = current_scope.parent
 
                 current_scope.variables.add(node.id.name)
             else:
                 scope.variables.add(node.id.name)
+
+                # Add variable functions to scope functions
+                if node.init and isinstance(
+                    node.init, (FunctionExpression, ArrowFunctionExpression)
+                ):
+                    scope.parent_functions[node.id.name] = len(node.init.params)
     else:
         for child in node.children():
             scope_analysis(child, scope)
@@ -114,6 +131,7 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 def fix_node_references(node: Node):
     if isinstance(node, Identifier):
         scope = node.parent.scope
+        print(node.parent)
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 
@@ -122,6 +140,7 @@ def fix_node_references(node: Node):
         if (
             scope.available_functions()
             and node.callee.name not in scope.available_functions()
+            and node.callee.name not in INBUILT_FUNCTIONS
         ):
             function, num_params = random.choice(
                 list(scope.available_functions().items())

@@ -1,23 +1,24 @@
 import copy
 import random
-from re import Pattern
 from typing import Tuple
 
-from js_ast.analysis import fix_node_references
-from js_ast.analysis import scope_analysis
-from js_ast.nodes import AssignmentProperty
-from js_ast.nodes import Expression
-from js_ast.nodes import ExpressionStatement
-from js_ast.nodes import ImportOrExportDeclaration
-from js_ast.nodes import Node
-from js_ast.nodes import Property
-from js_ast.nodes import RestElement
-from js_ast.nodes import SpreadElement
-from js_ast.nodes import Statement
-from js_ast.nodes import SwitchCase
-from js_ast.nodes import VariableDeclarator
 import numpy as np
 
+from js_ast.analysis import fix_node_references, scope_analysis
+from js_ast.nodes import (
+    AssignmentProperty,
+    Expression,
+    ExpressionStatement,
+    ImportOrExportDeclaration,
+    Node,
+    Pattern,
+    Property,
+    RestElement,
+    SpreadElement,
+    Statement,
+    SwitchCase,
+    VariableDeclarator,
+)
 
 node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
@@ -55,8 +56,13 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
         return target
 
     root = target.root()
+
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
+
+    print(target)
+    print(target.parent)
+    print(new_node)
 
     # TODO: Tidy up this code by possibly adding field to parent property of node
     # which indicates which field in the parent the child belongs to
@@ -81,9 +87,11 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
         print(target.parent)
         raise ValueError("Could not find target in parent")
 
+    print(target.parent)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root)
+    print(target.parent)
 
     return new_node
 
@@ -114,6 +122,8 @@ def remove(target: Node) -> Node:
         elif val is target:
             return target
 
+    print(target)
+    print(target.parent)
     raise ValueError("Could not find target in parent")
 
 

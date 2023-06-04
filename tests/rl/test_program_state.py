@@ -10,7 +10,7 @@ from js_ast.nodes import Program
 from rl.program_state import is_context_node
 from rl.program_state import ProgramState
 
-from utils.js_engine import Coverage
+from utils.js_engine import Coverage, ExecutionData, JSError
 
 
 class TestIsContextNode:
@@ -55,7 +55,9 @@ class TestIsContextNode:
 class TestProgramState:
     def test_move_up_root_node(self):
         node = Program(body=[], sourceType="script")
-        state = ProgramState(node, coverage=Coverage())
+        state = ProgramState(
+            node, exec_data=ExecutionData(Coverage(), JSError.NoError, "")
+        )
 
         assert not state.move_up()
 
@@ -68,7 +70,7 @@ class TestProgramState:
             generator=False,
         )
         root = Program(body=[parent], sourceType="script")
-        state = ProgramState(root, Coverage())
+        state = ProgramState(root, ExecutionData(Coverage(), JSError.NoError, ""))
 
         state.target_node = node
         state.context_node = deque([root, parent])
@@ -88,7 +90,7 @@ class TestProgramState:
         parent = BlockStatement(body=[node])
         root = Program(body=[parent], sourceType="script")
 
-        state = ProgramState(root, Coverage())
+        state = ProgramState(root, ExecutionData(Coverage(), JSError.NoError, ""))
 
         state.target_node = expr
         state.context_node = deque([root, parent])
@@ -101,7 +103,7 @@ class TestProgramState:
 
     def test_move_down_no_children(self):
         node = BlockStatement(body=[])
-        state = ProgramState(node, Coverage())
+        state = ProgramState(node, ExecutionData(Coverage(), JSError.NoError, ""))
 
         assert not state.move_down()
 
@@ -113,7 +115,7 @@ class TestProgramState:
             generator=False,
         )
         parent = Program(body=[node], sourceType="script")
-        state = ProgramState(parent, Coverage())
+        state = ProgramState(parent, ExecutionData(Coverage(), JSError.NoError, ""))
 
         assert state.move_down()
         assert state.target_node == node
@@ -134,7 +136,7 @@ class TestProgramState:
         )
         node = ExpressionStatement(expression=expr, directive="")
         parent = Program(body=[node], sourceType="script")
-        state = ProgramState(parent, Coverage())
+        state = ProgramState(parent, ExecutionData(Coverage(), JSError.NoError, ""))
 
         assert state.move_down()
         assert state.target_node == node

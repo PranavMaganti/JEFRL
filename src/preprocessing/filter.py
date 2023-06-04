@@ -11,7 +11,7 @@ def filter_corpus_by_coverage(
     total_coverage = Coverage()
 
     for state in tqdm.tqdm(corpus, desc="Filtering corpus"):
-        new_coverage = total_coverage | state.coverage
+        new_coverage = total_coverage | state.exec_data.coverage
 
         if new_coverage != total_coverage:
             filtered_corpus.append(state)

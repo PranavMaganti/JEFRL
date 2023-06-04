@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from dataclasses import field
 import json
 import logging
+import re
 from typing import Any, Generator, Optional, Union
 
 import js_ast.escodegen as escodegen
@@ -102,6 +103,14 @@ class Node(metaclass=abc.ABCMeta):
             if "type" not in data:
                 # Literal values can be empty dictionaries, for example.
                 return data
+
+            if data["type"] == "Literal" and hasattr(data, "regex") and data["regex"]:
+                return Literal(
+                    value=re.compile(data["regex"]["pattern"]),
+                    raw=data["raw"],
+                    regex=data["regex"],
+                )
+
             # Transform the type into the appropriate class.
             node_class = globals().get(data["type"])
             if not node_class:
@@ -218,6 +227,16 @@ class Literal(Expression):
     raw: str
     regex: Optional[dict[str, Any]] = None
     bigint: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        if self.regex:
+            return {
+                "type": "Literal",
+                "raw": self.raw,
+                "regex": self.regex,
+            }
+
+        return super().to_dict()
 
 
 @dataclass

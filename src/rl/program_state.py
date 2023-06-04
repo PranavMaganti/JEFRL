@@ -2,17 +2,17 @@ import copy
 import random
 from collections import deque
 from typing import Any, Optional
-from js_ast.analysis import count_statements
 
 from js_ast.mutation import add, remove, replace
 from js_ast.nodes import BlockStatement, ClassBody, FunctionDeclaration, Node, Program
-from utils.js_engine import Coverage
+from utils.js_engine import ExecutionData
 
 
 class ProgramState:
-    def __init__(self, program: Node, coverage: Coverage):
+    def __init__(self, program: Node, exec_data: ExecutionData):
         self.program = program
-        self.coverage = coverage
+        # self.coverage = coverage
+        self.exec_data = exec_data
         self.target_node: Node = program
         self.context_node: deque[Node] = deque([program])
 
@@ -66,7 +66,7 @@ class ProgramState:
     def __deepcopy__(self, _memo: dict[int, Any]):
         new = self.__class__(
             copy.deepcopy(self.program, _memo),
-            self.coverage,
+            self.exec_data,
         )
         new.history = list(self.history)
 

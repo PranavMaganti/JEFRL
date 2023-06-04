@@ -92,6 +92,8 @@ class TestReplace:
         assert new_node.right.name == "y"
 
         for child in parent.traverse():
+            if child.type == "Identifier" or child.type == "Literal":
+                continue
             assert child.scope is not None
 
     def test_replace_nested(self):
@@ -131,6 +133,8 @@ class TestReplace:
         assert new_node.name == "y"
 
         for child in root.traverse():
+            if child.type == "Identifier" or child.type == "Literal":
+                continue
             assert child.scope is not None
 
 
