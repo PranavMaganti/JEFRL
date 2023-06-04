@@ -12,6 +12,17 @@ class ScopeType(Enum):
 
 
 class Scope:
+    __slots__ = [
+        "variables",
+        "functions",
+        "classes",
+        "parent",
+        "scope_type",
+        "parent_variables",
+        "parent_functions",
+        "parent_classes",
+    ]
+
     def __init__(
         self,
         variables: Optional[set[str]] = None,
@@ -19,7 +30,7 @@ class Scope:
         classes: Optional[set[str]] = None,
         parent: Optional[Scope] = None,
         scope_type: ScopeType = ScopeType.BLOCK,
-    ) -> None:
+    ):
         self.variables: set[str] = variables if variables is not None else set()
         self.functions: dict[str, int] = functions if functions is not None else {}
         self.classes: set[str] = classes if classes is not None else set()
@@ -50,6 +61,13 @@ class Scope:
 
     def __repr__(self) -> str:
         return f"Scope({self.available_variables()}, {self.available_functions()}, {self.available_classes()}, {self.parent}, {self.scope_type})"
+
+    def __getstate__(self) -> object:
+        return {slot: getattr(self, slot) for slot in self.__slots__}
+
+    def __setstate__(self, d):
+        for slot in d:
+            setattr(self, slot, d[slot])
 
     # def __deepcopy__(self):
     #     return self.__class__(

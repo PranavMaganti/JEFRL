@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import ctypes
+from dataclasses import dataclass
 from enum import Enum
 import math
 from multiprocessing import shared_memory
@@ -40,10 +41,12 @@ class ShmData(ctypes.Structure):
 
 
 class Coverage:
-    def __init__(self, num_edges: int = 0, edges: Optional[NDArray[np.ubyte]] = None):
+    __slots__ = ["num_edges", "edges", "hit_edges"]
+
+    def __init__(self, num_edges: int = 0, edges: Optional[NDArray[np.uint8]] = None):
         self.num_edges = num_edges
         self.edges = (
-            np.zeros(math.ceil(self.num_edges / 8), dtype=np.ubyte)
+            np.zeros(math.ceil(self.num_edges / 8), dtype=np.uint8)
             if edges is None
             else edges
         )
@@ -107,11 +110,11 @@ class Coverage:
         return Coverage(self.num_edges, self.edges.copy())
 
 
+@dataclass(slots=True)
 class ExecutionData:
-    def __init__(self, coverage: Coverage, error: JSError, out: str):
-        self.error = error
-        self.coverage = coverage
-        self.out = out
+    coverage: Coverage
+    error: JSError
+    out: str
 
     def is_crash(self):
         return self.error == JSError.Other
@@ -177,7 +180,7 @@ class Engine(ABC):
 
         data = ShmData.from_buffer(shm.buf)
         exec_data = ExecutionData(
-            Coverage(int(data.num_edges), np.array(data.edges, dtype=np.ubyte)),
+            Coverage(int(data.num_edges), np.packbits(np.array(data.edges))),
             error,
             out if out is not None else "",
         )
@@ -209,7 +212,7 @@ class V8Engine(Engine):
 
     @property
     def corpus_path(self) -> Path:
-        return CORPUS_DIR / "v8-latest"
+        return CORPUS_DIR / "v8-2020"
 
     @property
     def corpus_lib_path(self) -> Path:

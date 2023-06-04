@@ -16,6 +16,8 @@ from utils.js_engine import ExecutionData
 
 
 class ProgramState:
+    __slots__ = ["program", "exec_data", "target_node", "context_node", "history"]
+
     def __init__(self, program: Node, exec_data: ExecutionData):
         self.program = program
         # self.coverage = coverage

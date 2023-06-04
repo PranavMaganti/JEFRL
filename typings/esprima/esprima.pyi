@@ -21,7 +21,6 @@ from esprima.nodes import Module
 from esprima.nodes import Node
 from esprima.nodes import Script
 
-
 def parse(code, options=..., delegate=..., **kwargs): ...
 def parseModule(code, options=..., delegate=..., **kwargs): ...
 def parseScript(

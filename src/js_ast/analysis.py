@@ -30,7 +30,8 @@ INBUILT_FUNCTIONS = set("gc")
 # Calculates variables, classes and functions available at each node and stores it in
 # a node attribute
 def scope_analysis(node: Node, scope: Optional[Scope] = None):
-    if node.type == "Identifier" or node.type == "Literal":
+    node_type = node.type
+    if node_type in set(["Literal", "Identifier"]):
         return
 
     if scope is None:
@@ -42,17 +43,13 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
         scope.available_classes(),
     )
 
-    if (
-        isinstance(node, Program)
-        or isinstance(node, BlockStatement)
-        or isinstance(node, ClassBody)
-    ):
-        if node.type == "Program":
+    if isinstance(node, (Program, BlockStatement, ClassBody)):
+        if node_type == "Program":
             new_scope = scope
-        elif node.type == "ClassBody":
+        elif node_type == "ClassBody":
             new_scope = Scope(parent=scope, scope_type=ScopeType.CLASS)
         elif (
-            node.type == "BlockStatement"
+            node_type == "BlockStatement"
             and node.parent
             and (
                 node.parent.type == "FunctionDeclaration"

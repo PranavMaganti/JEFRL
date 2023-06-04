@@ -95,3 +95,10 @@ def normalize_id(node: Node, id_dict: dict[str, str], prop: Optional[str] = None
     id_name = getattr(node, "name")
     if id_name in id_dict:
         setattr(node, "name", id_dict[id_name])
+
+
+def normalize_ast(node: Node):
+    id_dict = {}
+    id_cnt = {"f": 0, "c": 0, "v": 0}
+    collect_id(node, id_dict, id_cnt)
+    normalize_id(node, id_dict)

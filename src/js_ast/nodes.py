@@ -32,7 +32,7 @@ context_fields = {"parent", "scope", "end_scope", "origin_file"}
 non_child_fields = {"id"}
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class Node(metaclass=abc.ABCMeta):
     """Abstract Node class which defines node operations"""
 
@@ -122,6 +122,8 @@ class Node(metaclass=abc.ABCMeta):
                 for f in dataclasses.fields(node_class)
                 if f.name not in context_fields
             ]
+            if data["type"] == "FunctionDeclaration":
+                assert data["params"] is not None
             params: dict[str, Any] = {"origin_file": origin_file}
 
             for field in fields:
@@ -133,6 +135,9 @@ class Node(metaclass=abc.ABCMeta):
                     params[field] = None
                 else:
                     params[field] = Node.from_dict(data[data_field])
+
+            if data["type"] == "FunctionDeclaration":
+                assert params["params"] is not None
 
             return node_class(**params)
         else:
@@ -200,28 +205,31 @@ class Node(metaclass=abc.ABCMeta):
         )
 
     def __getstate__(self):
-        return self.__dict__
+        return {
+            slot.name: getattr(self, slot.name) for slot in dataclasses.fields(self)
+        }
 
-    def __setstate__(self, d: dict[str, Any]):
-        self.__dict__.update(d)
+    def __setstate__(self, d):
+        for slot in d:
+            setattr(self, slot, d[slot])
 
 
-@dataclass
+@dataclass(slots=True)
 class Pattern(Node):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class Expression(Node):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class Identifier(Expression, Pattern):
     name: str
 
 
-@dataclass
+@dataclass(slots=True)
 class Literal(Expression):
     value: Any
     raw: str
@@ -234,18 +242,24 @@ class Literal(Expression):
                 "type": "Literal",
                 "raw": self.raw,
                 "regex": self.regex,
+                "bigint": self.bigint,
             }
 
-        return super().to_dict()
+        return {
+            "type": "Literal",
+            "value": self.value,
+            "raw": self.raw,
+            "bigint": self.bigint,
+        }
 
 
-@dataclass
+@dataclass(slots=True)
 class Program(Node):
     sourceType: str
     body: list[Union[Statement, ImportOrExportDeclaration]]
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class Function(Node):
     id: Optional[Identifier] = None
     params: list[Pattern] = field(default_factory=list)
@@ -254,97 +268,97 @@ class Function(Node):
 
 
 # Statements
-@dataclass
+@dataclass(slots=True)
 class Statement(Node):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class ExpressionStatement(Statement):
     expression: Expression
     directive: str
 
 
-@dataclass
+@dataclass(slots=True)
 class BlockStatement(Statement):
     body: list[Statement] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class StaticBlock(BlockStatement):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class FunctionBody(BlockStatement):
     body: list[Union[ExpressionStatement, Statement]]
 
 
-@dataclass
+@dataclass(slots=True)
 class EmptyStatement(Statement):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class DebuggerStatement(Statement):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class WithStatement(Statement):
     object: Expression
     body: Statement
 
 
 # Control Flow
-@dataclass
+@dataclass(slots=True)
 class ReturnStatement(Statement):
     argument: Optional[Expression]
 
 
-@dataclass
+@dataclass(slots=True)
 class LabeledStatement(Statement):
     label: Identifier
     body: Statement
 
 
-@dataclass
+@dataclass(slots=True)
 class BreakStatement(Statement):
     label: Optional[Identifier]
 
 
-@dataclass
+@dataclass(slots=True)
 class ContinueStatement(Statement):
     label: Optional[Identifier]
 
 
 # Choice
-@dataclass
+@dataclass(slots=True)
 class IfStatement(Statement):
     test: Expression
     consequent: Statement
     alternate: Optional[Statement]
 
 
-@dataclass
+@dataclass(slots=True)
 class SwitchStatement(Statement):
     discriminant: Expression
     cases: list[SwitchCase] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class SwitchCase(Node):
     test: Optional[Expression]
     consequent: list[Statement] = field(default_factory=list)
 
 
 # Exceptions
-@dataclass
+@dataclass(slots=True)
 class ThrowStatement(Statement):
     argument: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class TryStatement(Statement):
     block: BlockStatement
     handler: Optional[CatchClause]
@@ -352,26 +366,26 @@ class TryStatement(Statement):
     param: Optional[Pattern]
 
 
-@dataclass
+@dataclass(slots=True)
 class CatchClause(Node):
     param: Pattern
     body: BlockStatement
 
 
 # Loops
-@dataclass
+@dataclass(slots=True)
 class WhileStatement(Statement):
     test: Expression
     body: Statement
 
 
-@dataclass
+@dataclass(slots=True)
 class DoWhileStatement(Statement):
     body: Statement
     test: Expression
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ForStatement(Statement):
     init: Optional[Union[VariableDeclaration, Expression]]
     test: Optional[Expression]
@@ -379,62 +393,62 @@ class ForStatement(Statement):
     body: Statement
 
 
-@dataclass
+@dataclass(slots=True)
 class ForInStatement(Statement):
     left: Union[VariableDeclaration, Pattern]
     right: Expression
     body: Statement
 
 
-@dataclass
+@dataclass(slots=True)
 class ForOfStatement(ForInStatement):
     awaitAllowed: bool
 
 
 # Declarations
-@dataclass
+@dataclass(slots=True)
 class Declaration(Statement):
     pass
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class FunctionDeclaration(Function, Declaration):
     id: Identifier
     expression: bool = False
     body: Union[FunctionBody, Expression]
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class VariableDeclaration(Declaration):
     declarations: list[VariableDeclarator]
     kind: str
 
 
-@dataclass
+@dataclass(slots=True)
 class VariableDeclarator(Node):
     id: Pattern
     init: Optional[Expression]
 
 
 # Expressions
-@dataclass
+@dataclass(slots=True)
 class ThisExpression(Expression):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class ArrayExpression(Expression):
     elements: list[Optional[Union[Expression, SpreadElement]]] = field(
         default_factory=list
     )
 
 
-@dataclass
+@dataclass(slots=True)
 class ObjectExpression(Expression):
     properties: list[Union[Property, SpreadElement]] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class Property(Node):
     key: Expression
     value: Expression
@@ -444,21 +458,21 @@ class Property(Node):
     computed: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class FunctionExpression(Function, Expression):
     expression: bool
     body: Union[FunctionBody, Expression]
 
 
 # Unary operations
-@dataclass
+@dataclass(slots=True)
 class UnaryExpression(Expression):
     operator: str
     prefix: bool
     argument: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class UpdateExpression(Expression):
     operator: str
     argument: Expression
@@ -466,171 +480,171 @@ class UpdateExpression(Expression):
 
 
 # Binary operations
-@dataclass
+@dataclass(slots=True)
 class BinaryExpression(Expression):
     operator: str
     left: Union[Expression, PrivateIdentifier]
     right: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class AssignmentExpression(Expression):
     operator: str
     left: Pattern
     right: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class LogicalExpression(Expression):
     operator: str
     left: Expression
     right: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class ChainExpression(Expression):
     expression: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class ChainElement(Node):
     optional: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class MemberExpression(ChainElement):
     object: Union[Expression, Super]
     property: Union[Expression, PrivateIdentifier]
     computed: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class ConditionalExpression(Expression):
     test: Expression
     consequent: Expression
     alternate: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class CallExpression(ChainElement):
     callee: Union[Expression, Super]
     arguments: list[Union[Expression, SpreadElement]] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class NewExpression(Expression):
     callee: Expression
     arguments: list[Union[Expression, SpreadElement]] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class SequenceExpression(Expression):
     expressions: list[Expression] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class Super(Node):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class SpreadElement(Node):
     argument: Expression
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ArrowFunctionExpression(Function, Expression):
     body: Union[FunctionBody, Expression]
     expression: bool
     generator: bool = False
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class YieldExpression(Expression):
     argument: Optional[Expression]
     delegate: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class AwaitExpression(Expression):
     argument: Expression
 
 
-@dataclass
+@dataclass(slots=True)
 class ImportExpression(Expression):
     source: Expression
 
 
 # Template Literals
-@dataclass
+@dataclass(slots=True)
 class TemplateLiteral(Expression):
     quasis: list[TemplateElement] = field(default_factory=list)
     expressions: list[Expression] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class TaggedTemplateExpression(Expression):
     tag: Expression
     quasi: TemplateLiteral
 
 
-@dataclass
+@dataclass(slots=True)
 class TemplateElement(Node):
     tail: bool
     value: dict[str, Any]
 
 
 # Patterns
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class AssignmentProperty(Property):
     kind: str = "init"
     method: bool = False
 
 
-@dataclass
+@dataclass(slots=True)
 class ObjectPattern(Pattern):
     properties: list[Union[AssignmentProperty, RestElement]] = field(
         default_factory=list
     )
 
 
-@dataclass
+@dataclass(slots=True)
 class ArrayPattern(Pattern):
     elements: list[Optional[Pattern]] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class RestElement(Pattern):
     argument: Pattern
 
 
-@dataclass
+@dataclass(slots=True)
 class AssignmentPattern(Pattern):
     left: Pattern
     right: Expression
 
 
 # Classes
-@dataclass
+@dataclass(slots=True)
 class Class(Node):
     id: Optional[Identifier]
     superClass: Optional[Expression]
     body: ClassBody
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassBody(Node):
     body: list[Union[MethodDefinition, PropertyDefinition, StaticBlock]] = field(
         default_factory=list
     )
 
 
-@dataclass
+@dataclass(slots=True)
 class PrivateIdentifier(Node):
     name: str
 
 
-@dataclass
+@dataclass(slots=True)
 class PropertyDefinition(Node):
     key: Union[Expression, PrivateIdentifier]
     value: Optional[Expression]
@@ -639,7 +653,7 @@ class PropertyDefinition(Node):
     static: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class MethodDefinition(Node):
     key: Union[Expression, PrivateIdentifier]
     value: FunctionExpression
@@ -648,39 +662,39 @@ class MethodDefinition(Node):
     static: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassDeclaration(Class, Declaration):
     id: Identifier
 
 
-@dataclass
+@dataclass(slots=True)
 class ClassExpression(Class, Expression):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class MetaProperty(Expression):
     meta: Identifier
     property: Identifier
 
 
 # Modules
-@dataclass
+@dataclass(slots=True)
 class ImportOrExportDeclaration(Node):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class ModuleSpecifier(Node):
     local: Identifier
 
 
-@dataclass
+@dataclass(slots=True)
 class Import(Node):
     pass
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ImportDeclaration(ImportOrExportDeclaration):
     specifiers: list[
         Union[ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier]
@@ -688,40 +702,40 @@ class ImportDeclaration(ImportOrExportDeclaration):
     source: Literal
 
 
-@dataclass
+@dataclass(slots=True)
 class ImportSpecifier(ModuleSpecifier):
     imported: Union[Identifier, Literal]
 
 
-@dataclass
+@dataclass(slots=True)
 class ImportDefaultSpecifier(ModuleSpecifier):
     pass
 
 
-@dataclass
+@dataclass(slots=True)
 class ImportNamespaceSpecifier(ModuleSpecifier):
     pass
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, slots=True)
 class ExportNamedDeclaration(ImportOrExportDeclaration):
     declaration: Optional[Declaration]
     specifiers: list[ExportSpecifier] = field(default_factory=list)
     source: Optional[Literal]
 
 
-@dataclass
+@dataclass(slots=True)
 class ExportSpecifier(ModuleSpecifier):
     local: Union[Identifier, Literal]
     exported: Union[Identifier, Literal]
 
 
-@dataclass
+@dataclass(slots=True)
 class ExportDefaultDeclaration(ImportOrExportDeclaration):
     declaration: Union[FunctionDeclaration, ClassDeclaration, Expression]
 
 
-@dataclass
+@dataclass(slots=True)
 class ExportAllDeclaration(ImportOrExportDeclaration):
     source: Literal
     exported: Optional[Union[Identifier, Literal]]

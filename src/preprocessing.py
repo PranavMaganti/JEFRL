@@ -1,10 +1,18 @@
+import dataclasses
+from dataclasses import dataclass
 import pickle
 import sys
 
 from js_ast.analysis import scope_analysis
+from js_ast.nodes import ClassDeclaration
+from js_ast.nodes import Expression
+from js_ast.nodes import FunctionDeclaration
+from js_ast.nodes import Node
 from preprocessing.filter import filter_corpus_by_coverage
 from preprocessing.normalise import collect_id
+from preprocessing.normalise import normalize_ast
 from preprocessing.normalise import normalize_id
+from preprocessing.sanitise import sanitise_ast
 import tqdm
 
 from utils.js_engine import V8Engine
@@ -22,10 +30,11 @@ setup_logging()
 engine = V8Engine()
 corpus = load_corpus(engine)
 
+
 for state in tqdm.tqdm(corpus, desc="Normalising corpus"):
-    id_dict: dict[str, str] = {}
-    collect_id(state.program, id_dict, {"v": 0, "f": 0, "c": 0})
-    normalize_id(state.program, id_dict)
+    sanitise_ast(state.program)
+    normalize_ast(state.program)
+
 
 subtrees = get_subtrees(corpus)
 corpus, total_coverage = filter_corpus_by_coverage(corpus)
