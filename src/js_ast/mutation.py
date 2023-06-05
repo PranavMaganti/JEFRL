@@ -47,14 +47,12 @@ non_add_types = {
 }
 
 
-def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
+def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     if target.parent is None:
         return target
 
     if target.type not in subtrees:
         return target
-
-    root = target.root()
 
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
@@ -95,7 +93,7 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     return new_node
 
 
-def remove(target: Node) -> Node:
+def remove(target: Node, root: Node) -> Node:
     if target.parent is None:
         return target
 
@@ -111,8 +109,6 @@ def remove(target: Node) -> Node:
                     val.pop(i)
 
                     # Re-analyze the scope of the parent as it may have changed
-                    root = target.root()
-
                     scope_analysis(root)
                     # Fix references in all nodes as we may have removed function/variable declarations
                     fix_node_references(root)
@@ -126,7 +122,7 @@ def remove(target: Node) -> Node:
     raise ValueError("Could not find target in parent")
 
 
-def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
+def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     if target.type not in node_add_types:
         return target
 
@@ -151,7 +147,6 @@ def add(subtrees: dict[str, list[Node]], target: Node) -> Node:
     new_node.parent = target
     list_nodes.append(new_node)
 
-    root = target.root()
     scope_analysis(root)
     # Only fix references of new node since we are adding it to the tree
     fix_node_references(new_node)

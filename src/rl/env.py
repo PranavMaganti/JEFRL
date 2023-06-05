@@ -108,9 +108,9 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             f.write(code)
 
         with open(
-            self.interesting_folder / f"{current_time}_{save_type}.ast", "wb"
+            self.interesting_folder / f"{current_time}_{save_type}.ps", "wb"
         ) as f:
-            pickle.dump(self._state.program, f)
+            pickle.dump(self._state, f)
 
         with open(
             self.interesting_folder / f"{current_time}_{save_type}.txt", "w"
