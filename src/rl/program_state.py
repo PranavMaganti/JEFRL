@@ -12,7 +12,7 @@ from js_ast.nodes import ClassBody
 from js_ast.nodes import FunctionDeclaration
 from js_ast.nodes import Node
 from js_ast.nodes import Program
-from rl.env import FuzzingAction
+from rl.fuzzing_action import FuzzingAction
 
 from utils.js_engine import ExecutionData
 

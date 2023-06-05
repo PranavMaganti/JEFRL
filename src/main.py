@@ -10,7 +10,8 @@ import traceback
 
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
-from rl.env import FuzzingAction
+
+from rl.fuzzing_action import FuzzingAction
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 from rl.train import epsilon_greedy
