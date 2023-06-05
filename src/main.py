@@ -170,7 +170,7 @@ try:
 
 except Exception as e:
     traceback.print_exception(type(e), e, e.__traceback__)
-    
+
 finally:
     end = datetime.now()
 
@@ -179,11 +179,18 @@ finally:
 
     torch.save(ast_net, save_folder / "ast_net.pt")
     torch.save(policy_net, save_folder / "policy_net.pt")
+    final_coverage = env.total_coverage.coverage()
+    total_steps = env.total_actions
+    total_executions = env.total_executions
+
     with open(save_folder / "run_data.pkl", "wb") as f:
         pickle.dump(
             {
                 "episode_rewards": episode_rewards,
                 "execution_coverage": execution_coverage,
+                "final_coverage": final_coverage,
+                "total_steps": total_steps,
+                "total_executions": total_executions,
             },
             f,
         )

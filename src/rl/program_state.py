@@ -3,7 +3,7 @@ import copy
 import random
 from typing import Any, Optional
 
-from js_ast.mutation import add
+from js_ast.mutation import add, modify
 from js_ast.mutation import remove
 from js_ast.mutation import replace
 from js_ast.nodes import BlockStatement
@@ -59,6 +59,9 @@ class ProgramState:
 
     def remove(self) -> Node:
         return remove(self.target_node)
+
+    def modify(self) -> bool:
+        return modify(self.target_node)
 
     def get_target_node(self) -> Node:
         return self.target_node

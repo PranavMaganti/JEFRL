@@ -23,16 +23,17 @@ from utils.js_engine import Engine
 from utils.js_engine import ExecutionData
 
 
-STATEMENT_PENALTY_WEIGHT = 5
+STATEMENT_PENALTY_WEIGHT = 4
 
 
 class FuzzingAction(IntEnum):
     REPLACE = 0
     ADD = 1
     REMOVE = 2
-    MOVE_UP = 3
-    MOVE_DOWN = 4
-    END = 5
+    MODIFY = 3
+    MOVE_UP = 4
+    MOVE_DOWN = 5
+    END = 6
 
     def __str__(self):
         match self:
@@ -42,6 +43,8 @@ class FuzzingAction(IntEnum):
                 return "Add"
             case FuzzingAction.REMOVE:
                 return "Remove"
+            case FuzzingAction.MODIFY:
+                return "Modify"
             case FuzzingAction.MOVE_UP:
                 return "Move Up"
             case FuzzingAction.MOVE_DOWN:
@@ -124,9 +127,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
 
     def _get_reward(self, exec_data: ExecutionData):
         num_statements = count_statements(self._state.program)
-        penalty = (
-            min(0, 1 - num_statements / self.max_statements) * STATEMENT_PENALTY_WEIGHT
-        )
+        penalty = (1 - num_statements / self.max_statements) * STATEMENT_PENALTY_WEIGHT
 
         new_coverage = exec_data.coverage | self.total_coverage
 
@@ -198,14 +199,20 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
                 return self._end()
             case FuzzingAction.REPLACE:
                 new_node = self._state.replace(self.subtrees)
+                changed = new_node is not self._state.target_node
             case FuzzingAction.ADD:
                 new_node = self._state.add(self.subtrees)
+                changed = new_node is not self._state.target_node
             case FuzzingAction.REMOVE:
                 new_node = self._state.remove()
+                changed = new_node is not self._state.target_node
+            case FuzzingAction.MODIFY:
+                changed = self._state.modify()
+                new_node = self._state.target_node
             case _:
                 raise ValueError(f"Invalid action: {action}")
         self.num_mutations += 1
-        if new_node is self._state.target_node:
+        if not changed:
             # Negative reward for action which does not change the state
             return (
                 self._get_obs(),
