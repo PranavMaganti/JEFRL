@@ -3,7 +3,8 @@ import copy
 import random
 from typing import Any, Optional
 
-from js_ast.mutation import add, modify
+from js_ast.mutation import add
+from js_ast.mutation import modify
 from js_ast.mutation import remove
 from js_ast.mutation import replace
 from js_ast.nodes import BlockStatement

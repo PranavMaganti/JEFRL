@@ -39,8 +39,13 @@ def load_raw_corpus(corpus_path: Path) -> dict[Path, Node]:
 
 
 # Loads corpus, skipping files that do not increase the coverage
-def load_corpus(engine: Engine) -> list[ProgramState]:
-    files = list(engine.corpus_path.rglob("*.js"))
+def load_corpus(
+    engine: Engine, corpus_path: Optional[Path] = None
+) -> list[ProgramState]:
+    if not corpus_path:
+        corpus_path = engine.corpus_path
+
+    files = list(corpus_path.rglob("*.js"))
     logging.info(f"Found {len(files)} files in corpus")
     corpus: list[ProgramState] = []
 
@@ -49,6 +54,7 @@ def load_corpus(engine: Engine) -> list[ProgramState]:
     # non_increasing_coverage = 0
 
     for file in tqdm.tqdm(files, desc="Loading corpus"):
+        # print(file)
         exec_data_path = Path(file).with_suffix(".pkl")
         ast_path = Path(file).with_suffix(".ast")
 
@@ -105,7 +111,7 @@ def load_ast(code: str, code_path: Path, ast_path: Path) -> Optional[Node]:
             with open(ast_path, "wb") as f:
                 pickle.dump(ast, f)
 
-        except (esprima.error_handler.Error, UnknownNodeTypeError):  # type: ignore
+        except (esprima.error_handler.Error, UnknownNodeTypeError, RecursionError):  # type: ignore
             # logging.warning(f"Failed to parse {file}")
             with open(ast_path, "wb") as f:
                 pickle.dump(None, f)

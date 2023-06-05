@@ -4,6 +4,19 @@ from typing import Any
 from js_ast.nodes import CallExpression
 from js_ast.nodes import ExpressionStatement
 from js_ast.nodes import Node
+from js_ast.nodes import ThrowStatement
+
+
+def sanitise_node(node: Node) -> bool:
+    if isinstance(node, ExpressionStatement):
+        if isinstance(node.expression, CallExpression):
+            if node.expression.callee.name and "assert" in node.expression.callee.name:
+                return True
+
+    if isinstance(node, ThrowStatement):
+        return True
+
+    return False
 
 
 def sanitise_ast(ast: Node):
@@ -14,13 +27,7 @@ def sanitise_ast(ast: Node):
                 new_body: list[Any] = []
                 v: Any
                 for v in val:
-                    if (
-                        isinstance(v, ExpressionStatement)
-                        and isinstance(v.expression, CallExpression)
-                        and v.expression.callee.name
-                        and "assert" in v.expression.callee.name
-                        # and "assert" in v.expression.callee.name
-                    ):
+                    if sanitise_node(v):
                         continue
 
                     new_body.append(v)

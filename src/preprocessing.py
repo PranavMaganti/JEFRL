@@ -1,5 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
+from pathlib import Path
 import pickle
 import sys
 
@@ -9,6 +10,7 @@ from js_ast.nodes import Expression
 from js_ast.nodes import FunctionDeclaration
 from js_ast.nodes import Node
 from preprocessing.filter import filter_corpus_by_coverage
+from preprocessing.filter import filter_corpus_by_length
 from preprocessing.normalise import collect_id
 from preprocessing.normalise import normalize_ast
 from preprocessing.normalise import normalize_id
@@ -28,7 +30,7 @@ sys.setrecursionlimit(10000)
 setup_logging()
 
 engine = V8Engine()
-corpus = load_corpus(engine)
+corpus = load_corpus(engine, Path("corpus/DIE"))
 
 
 for state in tqdm.tqdm(corpus, desc="Normalising corpus"):
@@ -37,6 +39,7 @@ for state in tqdm.tqdm(corpus, desc="Normalising corpus"):
 
 
 subtrees = get_subtrees(corpus)
+corpus = filter_corpus_by_length(corpus)
 corpus, total_coverage = filter_corpus_by_coverage(corpus)
 
 print(f"Total coverage: {total_coverage}")

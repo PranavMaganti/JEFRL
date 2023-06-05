@@ -166,7 +166,14 @@ class Engine(ABC):
                 check=False,
                 timeout=5,
             )
-            out = res.stdout.decode("utf-8")
+            try:
+                out = res.stdout.decode("utf-8")
+            except:
+                shm.close()
+                shm.unlink()
+
+                return None
+
             error = JSError.NoError
             if "ReferenceError" in out:
                 error = JSError.ReferenceError

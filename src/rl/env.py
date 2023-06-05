@@ -24,6 +24,7 @@ from utils.js_engine import ExecutionData
 
 
 STATEMENT_PENALTY_WEIGHT = 4
+MAX_STATEMENTS = 100
 
 
 class FuzzingAction(IntEnum):
@@ -65,7 +66,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         tokenizer: ASTTokenizer,
         interesting_folder: Path,
         max_mutations: int = 25,
-        max_statements: int = 100,
+        max_statements: int = MAX_STATEMENTS,
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
