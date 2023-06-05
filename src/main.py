@@ -1,28 +1,23 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
-from datetime import datetime
 import logging
 import os
-from pathlib import Path
 import pickle
 import sys
 import time
+import traceback
+from datetime import datetime
+from pathlib import Path
 
-from rl.dqn import DQN
-from rl.dqn import ReplayMemory
-from rl.env import FuzzingAction
-from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy
-from rl.train import optimise_model
-from rl.train import soft_update_params
 import torch
 from torch import optim
-from transformers import RobertaConfig
-from transformers import RobertaModel
+from transformers import RobertaConfig, RobertaModel
 
+from rl.dqn import DQN, ReplayMemory
+from rl.env import FuzzingAction, FuzzingEnv
+from rl.tokenizer import ASTTokenizer
+from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
-
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -134,53 +129,68 @@ logging.info("Starting training")
 
 total_steps = 0
 episode_rewards: list[float] = []
+execution_coverage: dict[tuple[int, int], float] = {}
 
+try:
+    for ep in range(NUM_EPISODES):
+        state, info = env.reset()
+        done, truncated = False, False
+        episode_reward = 0
 
-# try:
-for ep in range(NUM_EPISODES):
-    state, info = env.reset()
-    done, truncated = False, False
-    episode_reward = 0
+        while not done and not truncated:
+            action = epsilon_greedy(
+                policy_net, state, ast_net, tokenizer, env, total_steps, device
+            )
+            next_state, reward, truncated, done, info = env.step(action)
+            total_steps += 1
+            episode_reward += reward
 
-    while not done and not truncated:
-        action = epsilon_greedy(
-            policy_net, state, ast_net, tokenizer, env, total_steps, device
+            memory.push(state, action, next_state, reward)
+            optimise_model(
+                policy_net,
+                target_net,
+                ast_net,
+                tokenizer,
+                optimizer,
+                memory,
+                batch_size=32,
+                device=device,
+            )
+            soft_update_params(policy_net, target_net)
+
+            state = next_state
+            update_count += 1
+
+            if env.total_executions % 100 == 0:
+                execution_coverage[
+                    (env.total_executions, total_steps)
+                ] = env.total_coverage.coverage()
+
+        episode_rewards.append(episode_reward)
+
+except Exception as e:
+    traceback.print_exception(type(e), e, e.__traceback__)
+    
+finally:
+    end = datetime.now()
+
+    save_folder = Path("models") / save_folder_name
+    os.makedirs(save_folder, exist_ok=True)
+
+    torch.save(ast_net, save_folder / "ast_net.pt")
+    torch.save(policy_net, save_folder / "policy_net.pt")
+    with open(save_folder / "run_data.pkl", "wb") as f:
+        pickle.dump(
+            {
+                "episode_rewards": episode_rewards,
+                "execution_coverage": execution_coverage,
+            },
+            f,
         )
-        next_state, reward, truncated, done, info = env.step(action)
-        total_steps += 1
-        episode_reward += reward
 
-        memory.push(state, action, next_state, reward)
-        optimise_model(
-            policy_net,
-            target_net,
-            ast_net,
-            tokenizer,
-            optimizer,
-            memory,
-            batch_size=32,
-            device=device,
-        )
-        soft_update_params(policy_net, target_net)
-
-        state = next_state
-        update_count += 1
-
-    episode_rewards.append(episode_reward)
-# except Exception as e:
-#     print(e)
-
-# end = datetime.now()
-
-# save_folder = Path("models") / save_folder_name
-# os.makedirs(save_folder, exist_ok=True)
-
-# torch.save(ast_net, save_folder / "ast_net.pt")
-# torch.save(policy_net, save_folder / "policy_net.pt")
-
-# logging.info(
-#     f"Finished with final coverage: {env.total_coverage} in {end - start}",
-# )
-# logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
-# logging.info(f"Total steps: {env.total_actions}")
-# logging.info(f"Total engine executions: {env.total_executions}")
+    logging.info(
+        f"Finished with final coverage: {env.total_coverage} in {end - start}",
+    )
+    logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
+    logging.info(f"Total steps: {env.total_actions}")
+    logging.info(f"Total engine executions: {env.total_executions}")

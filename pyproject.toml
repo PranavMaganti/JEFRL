@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "js_rl"}]
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.11"
 esprima = "^4.0.1"
 numpy = "^1.24.2"
 tqdm = "^4.64.1"

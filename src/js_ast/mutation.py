@@ -59,9 +59,9 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
     new_node = copy.deepcopy(random.choice(subtrees[target.type]))
     new_node.parent = target.parent
 
-    print(target)
-    print(target.parent)
-    print(new_node)
+    # print(target)
+    # print(target.parent)
+    # print(new_node)
 
     # TODO: Tidy up this code by possibly adding field to parent property of node
     # which indicates which field in the parent the child belongs to
@@ -86,11 +86,11 @@ def replace(subtrees: dict[str, list[Node]], target: Node) -> Node:
         print(target.parent)
         raise ValueError("Could not find target in parent")
 
-    print(target.parent)
+    # print(target.parent)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root)
-    print(target.parent)
+    # print(target.parent)
 
     return new_node
 

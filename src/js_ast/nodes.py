@@ -187,9 +187,6 @@ class Node(metaclass=abc.ABCMeta):
     def __getattr__(self, name: str):
         return None
 
-    def __dir__(self):
-        return list(self.__dict__.keys())
-
     def __iter__(self):
         return self.__iter__
 
@@ -197,9 +194,9 @@ class Node(metaclass=abc.ABCMeta):
         return self.__class__(
             **copy.deepcopy(
                 {
-                    k: v
-                    for k, v in self.__dict__.items()
-                    if k not in {"parent", "scope", "end_scope"}
+                    k.name: getattr(self, k.name)
+                    for k in dataclasses.fields(self)
+                    if k.name not in {"parent", "scope", "end_scope"}
                 }
             )
         )
