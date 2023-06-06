@@ -17,7 +17,7 @@ from transformers import RobertaModel
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 20  # Number of transitions sampled from the replay buffer
+BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
 GAMMA = 0.9  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
@@ -81,6 +81,7 @@ def optimise_model(
     ast_net: RobertaModel,
     ast_tokenizer: ASTTokenizer,
     optimizer: optim.Optimizer,
+    lr_scheduler: optim.lr_scheduler.LambdaLR,
     memory: ReplayMemory,
     device: torch.device,
     batch_size: int = BATCH_SIZE,
@@ -89,6 +90,7 @@ def optimise_model(
     # If the replay buffer is not full, do not optimise
     if len(memory) < batch_size:
         return
+
 
     transitions = memory.sample(batch_size)
     states, actions, next_states, rewards = zip(*transitions)
@@ -133,3 +135,4 @@ def optimise_model(
     # In-place gradient clipping
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)  # type: ignore
     optimizer.step()
+    lr_scheduler.step()

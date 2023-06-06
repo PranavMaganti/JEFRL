@@ -1,30 +1,25 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
-from datetime import datetime
 import logging
 import os
-from pathlib import Path
 import pickle
 import sys
 import time
 import traceback
+from datetime import datetime
+from pathlib import Path
 
-from rl.dqn import DQN
-from rl.dqn import ReplayMemory
-
-from rl.fuzzing_action import FuzzingAction
-from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy
-from rl.train import optimise_model
-from rl.train import soft_update_params
 import torch
 from torch import optim
-from transformers import RobertaConfig
-from transformers import RobertaModel
+from transformers import (RobertaConfig, RobertaModel,
+                          get_linear_schedule_with_warmup)
 
+from rl.dqn import DQN, ReplayMemory
+from rl.env import FuzzingEnv
+from rl.fuzzing_action import FuzzingAction
+from rl.tokenizer import ASTTokenizer
+from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
-
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -47,7 +42,7 @@ total_coverage = data["total_coverage"]
 vocab = vocab_data["vocab"]
 token_to_id = vocab_data["token_to_id"]
 
-LR = 1e-3  # Learning rate of the AdamW optimizer
+LR = 1e-4  # Learning rate of the AdamW optimizer
 NUM_EPISODES = 10000  # Number of episodes to train the agent for
 MAX_LEN = 512  # Maximum length of the AST fragment sequence
 
@@ -112,6 +107,9 @@ optimizer = optim.AdamW(
     lr=LR,
     amsgrad=True,
 )
+lr_scheduler = get_linear_schedule_with_warmup(
+    optimizer=optimizer, num_warmup_steps=2400, num_training_steps=50000
+)
 memory = ReplayMemory(10000)
 update_count = 0
 
@@ -159,6 +157,7 @@ try:
                 ast_net,
                 tokenizer,
                 optimizer,
+                lr_scheduler,
                 memory,
                 batch_size=32,
                 device=device,
