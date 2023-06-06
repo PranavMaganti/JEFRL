@@ -91,7 +91,6 @@ def optimise_model(
     if len(memory) < batch_size:
         return
 
-
     transitions = memory.sample(batch_size)
     states, actions, next_states, rewards = zip(*transitions)
     batch = BatchTransition(states, actions, next_states, rewards)  # type: ignore

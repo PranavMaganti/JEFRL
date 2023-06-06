@@ -1,25 +1,30 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
+from datetime import datetime
 import logging
 import os
+from pathlib import Path
 import pickle
 import sys
 import time
 import traceback
-from datetime import datetime
-from pathlib import Path
 
-import torch
-from torch import optim
-from transformers import (RobertaConfig, RobertaModel,
-                          get_linear_schedule_with_warmup)
-
-from rl.dqn import DQN, ReplayMemory
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy, optimise_model, soft_update_params
+from rl.train import epsilon_greedy
+from rl.train import optimise_model
+from rl.train import soft_update_params
+import torch
+from torch import optim
+from transformers import get_linear_schedule_with_warmup
+from transformers import RobertaConfig
+from transformers import RobertaModel
+
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
 
 # System setup
 sys.setrecursionlimit(10000)

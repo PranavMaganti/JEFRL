@@ -1,25 +1,28 @@
 import copy
+from enum import IntEnum
 import logging
 import os
+from pathlib import Path
 import pickle
 import random
 import time
-from enum import IntEnum
-from pathlib import Path
 from typing import Any, Optional
 
 import gymnasium as gym
-import numpy as np
-import torch
 from gymnasium import spaces
-from tqdm import tqdm
-
 from js_ast.analysis import count_statements
 from js_ast.nodes import Node
+import numpy as np
 from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
 from rl.tokenizer import ASTTokenizer
-from utils.js_engine import Coverage, Engine, ExecutionData
+import torch
+from tqdm import tqdm
+
+from utils.js_engine import Coverage
+from utils.js_engine import Engine
+from utils.js_engine import ExecutionData
+
 
 STATEMENT_PENALTY_WEIGHT = 4
 MAX_STATEMENTS = 100

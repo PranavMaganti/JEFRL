@@ -189,8 +189,13 @@ class Engine(ABC):
             error = JSError.TimeoutError
 
         data = ShmData.from_buffer(shm.buf)
+
+        num_edges = int(data.num_edges)
+        num_bytes = math.ceil(num_edges / 8)
+        edges = np.array(np.ctypeslib.as_array(data.edges)[:num_bytes])
+
         exec_data = ExecutionData(
-            Coverage(int(data.num_edges), np.packbits(np.array(data.edges))),
+            Coverage(num_edges, edges),
             error,
             out if out is not None else "",
         )
