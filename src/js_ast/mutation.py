@@ -87,6 +87,7 @@ def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
         raise ValueError("Could not find target in parent")
 
     # print(target.parent)
+    # print(target)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root)
@@ -124,8 +125,8 @@ def remove(target: Node, root: Node) -> Node:
         elif val is target:
             return target
 
-    print(target)
-    print(target.parent)
+    # print(target)
+    # print(target.parent)
     raise ValueError("Could not find target in parent")
 
 

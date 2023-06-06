@@ -130,12 +130,12 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
 
     def _get_reward(self, exec_data: Optional[ExecutionData] = None) -> float:
         num_statements = count_statements(self._state.program)
-        penalty = (1 - num_statements / self.max_statements) * STATEMENT_PENALTY_WEIGHT
+        penalty = 1 - num_statements / self.max_statements
 
         if exec_data is None:
             return (
                 self._state.exec_data.coverage.hit_edges / self.total_coverage.hit_edges
-            ) * COVERAGE_REWARD_WEIGHT + penalty
+            ) + penalty
 
         new_coverage = exec_data.coverage | self.total_coverage
 
@@ -143,13 +143,13 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             self.total_coverage = new_coverage
             logging.info(f"Crash detected: {exec_data.out}")
             self.save_current_state("crash")
-            return 20
+            return 3 + penalty
 
         if new_coverage == self.total_coverage:
             # new coverage is the same as the current coverage
             return (
                 exec_data.coverage.hit_edges / self.total_coverage.hit_edges
-            ) * COVERAGE_REWARD_WEIGHT + penalty
+            ) + penalty
         else:
             # new coverage has increased total coverage
             self.coverage_increased = True
@@ -160,7 +160,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             self.corpus.append(self._state)
             self.total_coverage = new_coverage
 
-            return 5 + penalty
+            return 1 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()
@@ -283,7 +283,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
-            0 if self.coverage_increased else -5,
+            0 if self.coverage_increased else -2,
             True,
             self._get_done(),
             self._get_info(),

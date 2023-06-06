@@ -24,7 +24,7 @@ from utils.interesting_values import interesting_floats
 from utils.interesting_values import interesting_integers
 
 
-INBUILT_FUNCTIONS = set("gc")
+INBUILT_FUNCTIONS = set(["gc", "print", "log", "exit", "quit", "eval", "require"])
 
 
 # Calculates variables, classes and functions available at each node and stores it in
