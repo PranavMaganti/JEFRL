@@ -141,6 +141,8 @@ total_steps = 0
 episode_rewards: list[float] = []
 execution_coverage: dict[tuple[int, int], float] = {}
 
+initial_coverage = env.total_coverage.coverage()
+
 try:
     for ep in range(NUM_EPISODES):
         state, info = env.reset()
@@ -206,8 +208,12 @@ finally:
             f,
         )
 
+    logging.info(f"Inital coverage: {initial_coverage}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - start}",
+    )
+    logging.info(
+        f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
     )
     logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
     logging.info(f"Total steps: {env.total_actions}")

@@ -99,6 +99,9 @@ def remove(target: Node, root: Node) -> Node:
     if target.parent is None:
         return target
 
+    # print(target)
+    # print(target.parent)
+
     for field in target.parent.fields:
         val = getattr(target.parent, field)
 
@@ -112,6 +115,8 @@ def remove(target: Node, root: Node) -> Node:
 
                     # Re-analyze the scope of the parent as it may have changed
                     scope_analysis(root)
+                    print(target.parent)
+                    print(target)
                     # Fix references in all nodes as we may have removed function/variable declarations
                     fix_node_references(root)
 

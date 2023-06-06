@@ -36,7 +36,7 @@ vocab = vocab_data["vocab"]
 token_to_id = vocab_data["token_to_id"]
 
 start = datetime.now()
-save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
+save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f") + "_baseline"
 INTERESTING_FOLDER = Path("corpus/interesting")
 MAX_LEN = 512  # Maximum length of the AST fragment sequence
 
@@ -55,7 +55,8 @@ env = FuzzingEnv(
 )
 
 
-logging.info("Initial coverage: %s", env.total_coverage.coverage())
+logging.info(f"Initial coverage: {env.total_coverage}")
+initial_coverage = env.total_coverage.coverage()
 
 episode_rewards: list[float] = []
 execution_coverage: dict[tuple[int, int], float] = {}
@@ -106,9 +107,12 @@ finally:
             f,
         )
 
+    logging.info(f"Initial coverage: {initial_coverage:.5%}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - start}",
     )
+    logging.info(f"Coverage increase: {(final_coverage - initial_coverage):.5%}s")
+
     logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
     logging.info(f"Total steps: {env.total_actions}")
     logging.info(f"Total engine executions: {env.total_executions}")

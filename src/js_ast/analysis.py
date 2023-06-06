@@ -133,6 +133,10 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 def fix_node_references(node: Node):
     if isinstance(node, Identifier):
         scope = node.parent.scope
+
+        if not scope:
+            print(node.parent)
+
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 

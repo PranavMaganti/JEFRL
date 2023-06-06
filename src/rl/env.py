@@ -24,7 +24,8 @@ from utils.js_engine import Engine
 from utils.js_engine import ExecutionData
 
 
-STATEMENT_PENALTY_WEIGHT = 4
+STATEMENT_PENALTY_WEIGHT = 3
+COVERAGE_REWARD_WEIGHT = 2
 MAX_STATEMENTS = 100
 
 
@@ -76,7 +77,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         #         spaces.Text(max_length=10000),
         #         spaces.Text(max_length=10000),
         #     )
-        # )
+        # )exec_data.coverage.hit_edges / self.total_coverage.hit_edges + penalty
         self.render_mode = render_mode
 
         self.corpus = corpus
@@ -127,9 +128,14 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     def _get_info(self) -> dict[str, str]:
         return {}
 
-    def _get_reward(self, exec_data: ExecutionData):
+    def _get_reward(self, exec_data: Optional[ExecutionData] = None) -> float:
         num_statements = count_statements(self._state.program)
         penalty = (1 - num_statements / self.max_statements) * STATEMENT_PENALTY_WEIGHT
+
+        if exec_data is None:
+            return (
+                self._state.exec_data.coverage.hit_edges / self.total_coverage.hit_edges
+            ) * COVERAGE_REWARD_WEIGHT + penalty
 
         new_coverage = exec_data.coverage | self.total_coverage
 
@@ -137,22 +143,24 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             self.total_coverage = new_coverage
             logging.info(f"Crash detected: {exec_data.out}")
             self.save_current_state("crash")
-            return 20 + penalty
+            return 20
 
-        # new coverage is the same as the current coverage
         if new_coverage == self.total_coverage:
+            # new coverage is the same as the current coverage
             return (
-                exec_data.coverage.hit_edges / self.total_coverage.hit_edges + penalty
+                exec_data.coverage.hit_edges / self.total_coverage.hit_edges
+            ) * COVERAGE_REWARD_WEIGHT + penalty
+        else:
+            # new coverage has increased total coverage
+            self.coverage_increased = True
+            logging.info(
+                f"Coverage increased from {self.total_coverage} to {new_coverage}"
             )
+            self.save_current_state("coverage")
+            self.corpus.append(self._state)
+            self.total_coverage = new_coverage
 
-        # new coverage has increased total coverage
-        self.coverage_increased = True
-        logging.info(f"Coverage increased from {self.total_coverage} to {new_coverage}")
-        self.save_current_state("coverage")
-        self.corpus.append(self._state)
-        self.total_coverage = new_coverage
-
-        return 10 + penalty
+            return 5 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()
@@ -227,6 +235,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self._state.target_node = new_node
         code = self._state.generate_program_code()
         if not code:
+            # Negative reward for invalid program
             return (
                 self._get_obs(),
                 -1,
@@ -238,7 +247,8 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self.total_executions += 1
 
         if not exec_data:
-            return self._get_obs(), 0, self._get_truncated(), True, self._get_info()
+            # Negative reward for invalid program
+            return self._get_obs(), -1, self._get_truncated(), True, self._get_info()
 
         self._state.exec_data = exec_data
         reward = self._get_reward(exec_data)
@@ -251,7 +261,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
-            0 if self._state.move_up() else -1,
+            self._get_reward() if self._state.move_up() else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),
@@ -262,7 +272,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
-            0 if self._state.move_down() else -1,
+            self._get_reward() if self._state.move_down() else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),
