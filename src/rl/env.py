@@ -130,7 +130,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
 
     def _get_reward(self, exec_data: Optional[ExecutionData] = None) -> float:
         num_statements = count_statements(self._state.program)
-        penalty = 1 - num_statements / self.max_statements
+        penalty = min(0, 1 - num_statements / self.max_statements)
 
         if exec_data is None:
             return (

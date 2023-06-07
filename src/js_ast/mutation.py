@@ -116,8 +116,8 @@ def remove(target: Node, root: Node) -> Node:
 
                     # Re-analyze the scope of the parent as it may have changed
                     scope_analysis(root)
-                    print(target.parent)
-                    print(target)
+                    # print(target.parent)
+                    # print(target)
                     # Fix references in all nodes as we may have removed function/variable declarations
                     fix_node_references(root)
 

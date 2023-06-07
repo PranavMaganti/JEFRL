@@ -1,30 +1,24 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
-from datetime import datetime
 import logging
 import os
-from pathlib import Path
 import pickle
 import sys
 import time
 import traceback
+from datetime import datetime
+from pathlib import Path
 
-from rl.dqn import DQN
-from rl.dqn import ReplayMemory
+import torch
+from torch import optim
+from transformers import RobertaConfig, RobertaModel, get_linear_schedule_with_warmup
+
+from rl.dqn import DQN, ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy
-from rl.train import optimise_model
-from rl.train import soft_update_params
-import torch
-from torch import optim
-from transformers import get_linear_schedule_with_warmup
-from transformers import RobertaConfig
-from transformers import RobertaModel
-
+from rl.train import epsilon_greedy, optimise_model, soft_update_params
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
-
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -112,15 +106,13 @@ optimizer = optim.AdamW(
     lr=LR,
     amsgrad=True,
 )
-lr_scheduler = get_linear_schedule_with_warmup(
-    optimizer=optimizer, num_warmup_steps=2400, num_training_steps=50000
-)
-memory = ReplayMemory(10000)
-update_count = 0
+memory = ReplayMemory(5000)
 
 # Setup environment
 start = datetime.now()
 save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
+data_save_folder = Path("data/") / save_folder_name
+os.makedirs(data_save_folder, exist_ok=True)
 
 logging.info("Setting up environment")
 INTERESTING_FOLDER = Path("corpus/interesting")
@@ -147,7 +139,7 @@ try:
     for ep in range(NUM_EPISODES):
         state, info = env.reset()
         done, truncated = False, False
-        episode_reward = 0
+        episode_reward = []
 
         while not done and not truncated:
             action = epsilon_greedy(
@@ -155,7 +147,7 @@ try:
             )
             next_state, reward, truncated, done, info = env.step(action)
             total_steps += 1
-            episode_reward += reward
+            episode_reward.append(reward)
 
             memory.push(state, action, next_state, reward)
             optimise_model(
@@ -164,7 +156,6 @@ try:
                 ast_net,
                 tokenizer,
                 optimizer,
-                lr_scheduler,
                 memory,
                 batch_size=32,
                 device=device,
@@ -172,41 +163,41 @@ try:
             soft_update_params(policy_net, target_net)
 
             state = next_state
-            update_count += 1
-
             if env.total_executions % 100 == 0:
                 execution_coverage[
                     (env.total_executions, total_steps)
                 ] = env.total_coverage.coverage()
 
+            if total_steps % 1000 == 0:
+                torch.save(ast_net, data_save_folder / f"ast_net_{total_steps}.pt")
+                torch.save(
+                    policy_net, data_save_folder / f"policy_net_{total_steps}.pt"
+                )
+                final_coverage = env.total_coverage.coverage()
+                total_steps = env.total_actions
+                total_executions = env.total_executions
+
+                with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
+                    pickle.dump(
+                        {
+                            "episode_rewards": episode_rewards,
+                            "execution_coverage": execution_coverage,
+                            "final_coverage": final_coverage,
+                            "total_steps": total_steps,
+                            "total_executions": total_executions,
+                        },
+                        f,
+                    )
+
         episode_rewards.append(episode_reward)
+
+
 
 except Exception as e:
     traceback.print_exception(type(e), e, e.__traceback__)
 
 finally:
     end = datetime.now()
-
-    save_folder = Path("models") / save_folder_name
-    os.makedirs(save_folder, exist_ok=True)
-
-    torch.save(ast_net, save_folder / "ast_net.pt")
-    torch.save(policy_net, save_folder / "policy_net.pt")
-    final_coverage = env.total_coverage.coverage()
-    total_steps = env.total_actions
-    total_executions = env.total_executions
-
-    with open(save_folder / "run_data.pkl", "wb") as f:
-        pickle.dump(
-            {
-                "episode_rewards": episode_rewards,
-                "execution_coverage": execution_coverage,
-                "final_coverage": final_coverage,
-                "total_steps": total_steps,
-                "total_executions": total_executions,
-            },
-            f,
-        )
 
     logging.info(f"Inital coverage: {initial_coverage}")
     logging.info(

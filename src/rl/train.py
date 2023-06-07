@@ -16,11 +16,12 @@ from transformers import RobertaModel
 
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 10000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+EPS_DECAY = 3000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
-GAMMA = 0.9  # Discount factor as mentioned in the previous section
+GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
+ACTION_WEIGHTS = [1, 1, 1, 1, 1.5, 2, 0.2]
 
 # Select action based on epsilon-greedy policy
 def epsilon_greedy(
@@ -41,11 +42,13 @@ def epsilon_greedy(
             state_embedding = get_state_embedding(
                 [state], ast_net, tokenizer, device
             ).view(-1)
-            return np.int64(policy_net(state_embedding).argmax().item())
+            values = policy_net(state_embedding)
+            logging.info(f"Q-values: {values}")
+            return np.int64(values.argmax().item())
     else:
         print(f"RANDOM ACTION: {eps_threshold}")
         # Sample random action
-        return env.action_space.sample()
+        return np.int64(random.choices(range(env.action_space.n), ACTION_WEIGHTS)[0])
 
 
 def soft_update_params(policy_net: DQN, target_net: DQN, tau: float = TAU):
@@ -81,7 +84,6 @@ def optimise_model(
     ast_net: RobertaModel,
     ast_tokenizer: ASTTokenizer,
     optimizer: optim.Optimizer,
-    lr_scheduler: optim.lr_scheduler.LambdaLR,
     memory: ReplayMemory,
     device: torch.device,
     batch_size: int = BATCH_SIZE,
@@ -132,6 +134,5 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 5)  # type: ignore
     optimizer.step()
-    lr_scheduler.step()
