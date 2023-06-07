@@ -136,11 +136,13 @@ env = FuzzingEnv(
 
 logging.info("Starting training")
 
+
 total_steps = 0
+initial_coverage = env.total_coverage.coverage()
+
 episode_rewards: list[list[float]] = []
 execution_coverage: dict[tuple[int, int], float] = {}
-
-initial_coverage = env.total_coverage.coverage()
+episode_coverage: list[float] = [initial_coverage]
 
 try:
     for ep in range(NUM_EPISODES):
@@ -196,6 +198,7 @@ try:
                         f,
                     )
 
+        episode_coverage.append(env.total_coverage.coverage())
         episode_rewards.append(episode_reward)
 
 

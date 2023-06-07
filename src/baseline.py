@@ -61,11 +61,13 @@ env = FuzzingEnv(
 
 
 logging.info(f"Initial coverage: {env.total_coverage}")
+
 initial_coverage = env.total_coverage.coverage()
+total_steps = 0
 
 episode_rewards: list[list[float]] = []
 execution_coverage: dict[tuple[int, int], float] = {}
-total_steps = 0
+episode_coverage: list[float] = []
 
 try:
     while True:
@@ -92,8 +94,9 @@ try:
                     pickle.dump(
                         {
                             "episode_rewards": episode_rewards,
-                            "execution_coverage": execution_coverage,
                             "current_coverage": current_coverage,
+                            "execution_coverage": execution_coverage,
+                            "episode_coverage": episode_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
                             "running_time": datetime.now() - start,
@@ -102,6 +105,7 @@ try:
                     )
 
         episode_rewards.append(episode_reward)
+        episode_coverage.append(env.total_coverage.coverage())
         logging.info(f"Episode reward: {sum(episode_reward)}")
 
 except Exception as e:
