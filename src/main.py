@@ -8,6 +8,8 @@ import sys
 import time
 import traceback
 
+import numpy as np
+
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
@@ -135,7 +137,7 @@ env = FuzzingEnv(
 logging.info("Starting training")
 
 total_steps = 0
-episode_rewards: list[float] = []
+episode_rewards: list[list[float]] = []
 execution_coverage: dict[tuple[int, int], float] = {}
 
 initial_coverage = env.total_coverage.coverage()
@@ -144,7 +146,7 @@ try:
     for ep in range(NUM_EPISODES):
         state, info = env.reset()
         done, truncated = False, False
-        episode_reward = []
+        episode_reward: list[float] = []
 
         while not done and not truncated:
             action = epsilon_greedy(
@@ -210,6 +212,6 @@ finally:
     logging.info(
         f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
     )
-    logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
+    logging.info(f"Average reward: {np.mean(np.sum(episode_rewards, axis=1)):.2f}")
     logging.info(f"Total steps: {env.total_actions}")
     logging.info(f"Total engine executions: {env.total_executions}")

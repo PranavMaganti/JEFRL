@@ -8,6 +8,8 @@ import pickle
 import sys
 import traceback
 
+import numpy as np
+
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 
@@ -61,15 +63,16 @@ env = FuzzingEnv(
 logging.info(f"Initial coverage: {env.total_coverage}")
 initial_coverage = env.total_coverage.coverage()
 
-episode_rewards: list[float] = []
+episode_rewards: list[list[float]] = []
 execution_coverage: dict[tuple[int, int], float] = {}
 total_steps = 0
 
 try:
     while True:
         state, info = env.reset()
-        t = 0
-        episode_reward = 0
+        done, truncated = False, False
+        episode_reward: list[float] = []
+
         while not done and not truncated:
             action = env.action_space.sample()
             next_state, reward, truncated, done, info = env.step(action)
@@ -115,6 +118,6 @@ finally:
     logging.info(
         f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
     )
-    logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
+    logging.info(f"Average reward: {np.mean(np.sum(episode_rewards, axis=1)):.2f}")
     logging.info(f"Total steps: {env.total_actions}")
     logging.info(f"Total engine executions: {env.total_executions}")
