@@ -1,24 +1,29 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
+from datetime import datetime
 import logging
 import os
+from pathlib import Path
 import pickle
 import sys
 import time
 import traceback
-from datetime import datetime
-from pathlib import Path
 
-import torch
-from torch import optim
-from transformers import RobertaConfig, RobertaModel, get_linear_schedule_with_warmup
-
-from rl.dqn import DQN, ReplayMemory
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy, optimise_model, soft_update_params
+from rl.train import epsilon_greedy
+from rl.train import optimise_model
+from rl.train import soft_update_params
+import torch
+from torch import optim
+from transformers import RobertaConfig
+from transformers import RobertaModel
+
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -173,7 +178,7 @@ try:
                 torch.save(
                     policy_net, data_save_folder / f"policy_net_{total_steps}.pt"
                 )
-                final_coverage = env.total_coverage.coverage()
+                current_coverage = env.total_coverage.coverage()
                 total_executions = env.total_executions
 
                 with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
@@ -181,7 +186,7 @@ try:
                         {
                             "episode_rewards": episode_rewards,
                             "execution_coverage": execution_coverage,
-                            "final_coverage": final_coverage,
+                            "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
                             "running_time": datetime.now() - start,
@@ -198,7 +203,7 @@ except Exception as e:
 finally:
     end = datetime.now()
 
-    logging.info(f"Inital coverage: {initial_coverage}")
+    logging.info(f"Initial coverage: {initial_coverage}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - start}",
     )

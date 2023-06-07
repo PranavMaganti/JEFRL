@@ -82,7 +82,7 @@ try:
                 ] = env.total_coverage.coverage()
 
             if total_steps % 1000 == 0:
-                final_coverage = env.total_coverage.coverage()
+                current_coverage = env.total_coverage.coverage()
                 total_executions = env.total_executions
 
                 with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
@@ -90,7 +90,7 @@ try:
                         {
                             "episode_rewards": episode_rewards,
                             "execution_coverage": execution_coverage,
-                            "final_coverage": final_coverage,
+                            "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
                             "running_time": datetime.now() - start,
@@ -106,13 +106,15 @@ except Exception as e:
 
 finally:
     end = datetime.now()
+    final_coverage = env.total_coverage.coverage()
 
-    logging.info(f"Initial coverage: {initial_coverage:.5%}")
+    logging.info(f"Initial coverage: {initial_coverage}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - start}",
     )
-    logging.info(f"Coverage increase: {(final_coverage - initial_coverage):.5%}s")
-
+    logging.info(
+        f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
+    )
     logging.info(f"Average reward: {sum(episode_rewards) / len(episode_rewards)}")
     logging.info(f"Total steps: {env.total_actions}")
     logging.info(f"Total engine executions: {env.total_executions}")
