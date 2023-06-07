@@ -163,7 +163,7 @@ try:
             soft_update_params(policy_net, target_net)
 
             state = next_state
-            if env.total_executions % 100 == 0:
+            if total_steps % 100 == 0:
                 execution_coverage[
                     (env.total_executions, total_steps)
                 ] = env.total_coverage.coverage()
@@ -174,7 +174,6 @@ try:
                     policy_net, data_save_folder / f"policy_net_{total_steps}.pt"
                 )
                 final_coverage = env.total_coverage.coverage()
-                total_steps = env.total_actions
                 total_executions = env.total_executions
 
                 with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
@@ -185,12 +184,12 @@ try:
                             "final_coverage": final_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
+                            "running_time": datetime.now() - start,
                         },
                         f,
                     )
 
         episode_rewards.append(episode_reward)
-
 
 
 except Exception as e:

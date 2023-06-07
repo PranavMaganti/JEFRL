@@ -37,6 +37,9 @@ token_to_id = vocab_data["token_to_id"]
 
 start = datetime.now()
 save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f") + "_baseline"
+data_save_folder = Path("data") / save_folder_name
+os.makedirs(data_save_folder, exist_ok=True)
+
 INTERESTING_FOLDER = Path("corpus/interesting")
 MAX_LEN = 512  # Maximum length of the AST fragment sequence
 
@@ -60,52 +63,49 @@ initial_coverage = env.total_coverage.coverage()
 
 episode_rewards: list[float] = []
 execution_coverage: dict[tuple[int, int], float] = {}
+total_steps = 0
 
 try:
     while True:
         state, info = env.reset()
         t = 0
         episode_reward = 0
-        for t in count():
+        while not done and not truncated:
             action = env.action_space.sample()
             next_state, reward, truncated, done, info = env.step(action)
-            episode_reward += reward
+            episode_reward.append(reward)
+            total_steps += 1
 
-            if env.total_executions % 100 == 0:
+            if total_steps % 100 == 0:
                 execution_coverage[
                     (env.total_executions, env.total_actions)
                 ] = env.total_coverage.coverage()
 
-            if done or truncated:
-                break
+            if total_steps % 1000 == 0:
+                final_coverage = env.total_coverage.coverage()
+                total_executions = env.total_executions
+
+                with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
+                    pickle.dump(
+                        {
+                            "episode_rewards": episode_rewards,
+                            "execution_coverage": execution_coverage,
+                            "final_coverage": final_coverage,
+                            "total_steps": total_steps,
+                            "total_executions": total_executions,
+                            "running_time": datetime.now() - start,
+                        },
+                        f,
+                    )
 
         episode_rewards.append(episode_reward)
-        logging.info(f"Episode reward: {episode_reward}")
+        logging.info(f"Episode reward: {sum(episode_reward)}")
 
 except Exception as e:
     traceback.print_exception(type(e), e, e.__traceback__)
 
 finally:
     end = datetime.now()
-
-    save_folder = Path("models") / save_folder_name
-    os.makedirs(save_folder, exist_ok=True)
-
-    final_coverage = env.total_coverage.coverage()
-    total_steps = env.total_actions
-    total_executions = env.total_executions
-
-    with open(save_folder / "run_data.pkl", "wb") as f:
-        pickle.dump(
-            {
-                "episode_rewards": episode_rewards,
-                "execution_coverage": execution_coverage,
-                "final_coverage": final_coverage,
-                "total_steps": total_steps,
-                "total_executions": total_executions,
-            },
-            f,
-        )
 
     logging.info(f"Initial coverage: {initial_coverage:.5%}")
     logging.info(
