@@ -2,24 +2,14 @@ import copy
 import random
 from typing import Tuple
 
-from js_ast.analysis import fix_node_references, random_value
-from js_ast.analysis import scope_analysis
-from js_ast.nodes import AssignmentExpression, Literal
-from js_ast.nodes import AssignmentProperty
-from js_ast.nodes import BinaryExpression
-from js_ast.nodes import Expression
-from js_ast.nodes import ExpressionStatement
-from js_ast.nodes import ImportOrExportDeclaration
-from js_ast.nodes import Node
-from js_ast.nodes import Pattern
-from js_ast.nodes import Property
-from js_ast.nodes import RestElement
-from js_ast.nodes import SpreadElement
-from js_ast.nodes import Statement
-from js_ast.nodes import SwitchCase
-from js_ast.nodes import VariableDeclarator
 import numpy as np
 
+from js_ast.analysis import fix_node_references, random_value, scope_analysis
+from js_ast.nodes import (AssignmentExpression, AssignmentProperty,
+                          BinaryExpression, Expression, ExpressionStatement,
+                          Identifier, ImportOrExportDeclaration, Literal, Node,
+                          Pattern, Property, RestElement, SpreadElement,
+                          Statement, SwitchCase, VariableDeclarator)
 
 node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),
@@ -56,8 +46,11 @@ def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     if target.type not in subtrees:
         return target
 
-    new_node = copy.deepcopy(random.choice(subtrees[target.type]))
-    new_node.parent = target.parent
+    if target.type == "Literal" or target.type == "Identifier":
+        new_node = random_value(target.parent.scope, target.parent)
+    else:
+        new_node = copy.deepcopy(random.choice(subtrees[target.type]))
+        new_node.parent = target.parent
 
     # print(target)
     # print(target.parent)
@@ -169,9 +162,6 @@ ASSIGNMENT_OPERATORS = ["=", "+=", "-=", "*=", "/=", "%=", "**="]
 
 
 def modify(target: Node) -> bool:
-    # if isinstance(target, Literal):
-    #     new_node = random_value(scope=target.parent.scope, parent=target.parent)
-
     if isinstance(target, BinaryExpression):
         target.operator = np.random.choice(
             BINARY_OPERATORS + COMPARISON_OPERATORS + LOGICAL_OPERATORS
