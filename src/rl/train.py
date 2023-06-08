@@ -3,16 +3,14 @@ import math
 import random
 
 import numpy as np
-from rl.dqn import BatchTransition
-from rl.dqn import DQN
-from rl.dqn import ReplayMemory
-from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
 import torch
-from torch import nn
-from torch import optim
+import torch.nn.functional as F
+from torch import nn, optim
 from transformers import RobertaModel
 
+from rl.dqn import DQN, BatchTransition, ReplayMemory
+from rl.env import FuzzingEnv
+from rl.tokenizer import ASTTokenizer
 
 EPS_START = 0.95  # Starting value of epsilon
 EPS_END = 0.05
@@ -22,6 +20,7 @@ GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
 ACTION_WEIGHTS = [1, 1, 1, 1, 1.5, 2, 0.2]
+
 
 # Select action based on epsilon-greedy policy
 def epsilon_greedy(
@@ -108,24 +107,35 @@ def optimise_model(
     action_batch = torch.tensor(batch.actions).view(-1, 1).to(device)
     reward_batch = torch.tensor(batch.rewards).to(device)
 
-    # Encode the state and get the Q values for the actions taken
-    state_action_values = policy_net(states_batch).gather(1, action_batch)
+    # # Encode the state and get the Q values for the actions taken
+    # state_action_values = policy_net(states_batch).gather(1, action_batch)
 
+    # next_state_values = torch.zeros(batch_size, device=device)
+    # with torch.no_grad():
+    #     non_final_next_states = [s for s in batch.next_states if s is not None]
+    #     non_final_next_states = get_state_embedding(
+    #         non_final_next_states, ast_net, ast_tokenizer, device
+    #     )
+
+    #     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+
+    current_state_values = policy_net(states_batch).gather(1, action_batch)
     next_state_values = torch.zeros(batch_size, device=device)
-    with torch.no_grad():
-        non_final_next_states = [s for s in batch.next_states if s is not None]
-        non_final_next_states = get_state_embedding(
-            non_final_next_states, ast_net, ast_tokenizer, device
-        )
 
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+    non_final_next_states = [s for s in batch.next_states if s is not None]
+    non_final_next_states = get_state_embedding(
+        non_final_next_states, ast_net, ast_tokenizer, device
+    )
+    non_final_next_actions = policy_net(non_final_next_states).argmax(1, keepdim=True)
+    next_state_values[non_final_mask] = (
+        target_net(non_final_next_states).gather(1, non_final_next_actions).detach()
+    )
 
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * gamma) + reward_batch
 
     # Compute Huber loss
-    criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+    loss = F.smooth_l1_loss(current_state_values, expected_state_action_values)
 
     logging.info(f"Loss: {loss.item()}")
 
@@ -134,5 +144,5 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 5)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 1)  # type: ignore
     optimizer.step()

@@ -130,7 +130,7 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 
 # Fixes the node by replacing identifiers and function calls with available variables and
 # functions
-def fix_node_references(node: Node):
+def fix_node_references(node: Node, target: Optional[Node] = None):
     if isinstance(node, Identifier):
         scope = node.parent.scope
 
@@ -151,7 +151,12 @@ def fix_node_references(node: Node):
                 list(scope.available_functions().items())
             )
             node.callee.name = function
-            node.arguments = [random_value(scope, node) for _ in range(num_params)]
+            if target and target.parent == node:
+                node.arguments = [target] + [
+                    random_value(scope, node) for _ in range(num_params - 1)
+                ]
+            else:
+                node.arguments = [random_value(scope, node) for _ in range(num_params)]
     else:
         for child in node.children():
             fix_node_references(child)
@@ -179,7 +184,7 @@ def random_value(scope: Scope, parent: Node):
                 operator="-", argument=literal, prefix=True, parent=parent, scope=scope
             )
 
-        return Literal(value=value, raw=str(value), scope=scope)
+        return Literal(value=value, raw=str(value), scope=scope, parent=parent)
 
 
 def count_statements(root: Node):

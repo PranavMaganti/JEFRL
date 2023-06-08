@@ -2,9 +2,9 @@ import copy
 import random
 from typing import Tuple
 
-from js_ast.analysis import fix_node_references
+from js_ast.analysis import fix_node_references, random_value
 from js_ast.analysis import scope_analysis
-from js_ast.nodes import AssignmentExpression
+from js_ast.nodes import AssignmentExpression, Literal
 from js_ast.nodes import AssignmentProperty
 from js_ast.nodes import BinaryExpression
 from js_ast.nodes import Expression
@@ -90,7 +90,7 @@ def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     # print(target)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
-    fix_node_references(root)
+    fix_node_references(root, new_node)
     # print(target.parent)
 
     return new_node
@@ -119,7 +119,7 @@ def remove(target: Node, root: Node) -> Node:
                     # print(target.parent)
                     # print(target)
                     # Fix references in all nodes as we may have removed function/variable declarations
-                    fix_node_references(root)
+                    fix_node_references(root, target.parent)
 
                     return target.parent
         elif val is target:
@@ -157,7 +157,7 @@ def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
 
     scope_analysis(root)
     # Only fix references of new node since we are adding it to the tree
-    fix_node_references(new_node)
+    fix_node_references(new_node, new_node)
 
     return new_node
 
@@ -169,6 +169,9 @@ ASSIGNMENT_OPERATORS = ["=", "+=", "-=", "*=", "/=", "%=", "**="]
 
 
 def modify(target: Node) -> bool:
+    # if isinstance(target, Literal):
+    #     new_node = random_value(scope=target.parent.scope, parent=target.parent)
+
     if isinstance(target, BinaryExpression):
         target.operator = np.random.choice(
             BINARY_OPERATORS + COMPARISON_OPERATORS + LOGICAL_OPERATORS

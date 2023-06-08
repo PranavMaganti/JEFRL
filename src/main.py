@@ -143,20 +143,25 @@ initial_coverage = env.total_coverage.coverage()
 episode_rewards: list[list[float]] = []
 execution_coverage: dict[tuple[int, int], float] = {}
 episode_coverage: list[float] = [initial_coverage]
+episode_actions: list[list[tuple[int, str]]] = []
 
 try:
     for ep in range(NUM_EPISODES):
         state, info = env.reset()
         done, truncated = False, False
         episode_reward: list[float] = []
+        episode_action: list[tuple[int, str]] = []
 
         while not done and not truncated:
             action = epsilon_greedy(
                 policy_net, state, ast_net, tokenizer, env, total_steps, device
             )
+            episode_action.append((action, env._state.target_node.type))
+
             next_state, reward, truncated, done, info = env.step(action)
-            total_steps += 1
             episode_reward.append(reward)
+
+            total_steps += 1
 
             memory.push(state, action, next_state, reward)
             optimise_model(
@@ -188,6 +193,7 @@ try:
                 with open(data_save_folder / f"run_data_{total_steps}.pkl", "wb") as f:
                     pickle.dump(
                         {
+                            "episode_actions": episode_actions,
                             "episode_rewards": episode_rewards,
                             "execution_coverage": execution_coverage,
                             "current_coverage": current_coverage,
@@ -207,6 +213,7 @@ except Exception as e:
 
 finally:
     end = datetime.now()
+    episode_rewards_summed = [sum(episode) for episode in episode_rewards]
 
     logging.info(f"Initial coverage: {initial_coverage}")
     logging.info(
@@ -215,6 +222,6 @@ finally:
     logging.info(
         f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
     )
-    logging.info(f"Average reward: {np.mean(np.sum(episode_rewards, axis=1)):.2f}")
+    logging.info(f"Average reward: {np.mean(episode_rewards_summed):.2f}")
     logging.info(f"Total steps: {env.total_actions}")
     logging.info(f"Total engine executions: {env.total_executions}")
