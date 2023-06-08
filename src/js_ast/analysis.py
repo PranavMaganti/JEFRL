@@ -24,7 +24,22 @@ from utils.interesting_values import interesting_floats
 from utils.interesting_values import interesting_integers
 
 
-INBUILT_FUNCTIONS = set(["gc", "print", "log", "exit", "quit", "eval", "require"])
+INBUILT_FUNCTIONS = set(
+    [
+        "gc",
+        "print",
+        "log",
+        "exit",
+        "quit",
+        "eval",
+        "require",
+        "parseInt",
+        "parseFloat",
+        "isNaN",
+        "isFinite",
+        "encodeURI",
+    ]
+)
 
 
 # Calculates variables, classes and functions available at each node and stores it in
@@ -168,7 +183,6 @@ def random_value(scope: Scope, parent: Node):
         return Identifier(
             name=random.choice(list(scope.available_variables())),
             parent=parent,
-            scope=scope,
         )
     else:
         # TODO: add more types and interesting values
@@ -179,12 +193,12 @@ def random_value(scope: Scope, parent: Node):
 
         if value < 0 or str(value).startswith("-"):
             value = -value
-            literal = Literal(value=value, raw=str(value), scope=scope)
+            literal = Literal(value=value, raw=str(value))
             return UnaryExpression(
                 operator="-", argument=literal, prefix=True, parent=parent, scope=scope
             )
 
-        return Literal(value=value, raw=str(value), scope=scope, parent=parent)
+        return Literal(value=value, raw=str(value), parent=parent)
 
 
 def count_statements(root: Node):

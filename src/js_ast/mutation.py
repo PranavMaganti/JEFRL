@@ -39,12 +39,14 @@ non_add_types = {
 }
 
 
-def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
+def replace(
+    subtrees: dict[str, list[Node]], target: Node, root: Node
+) -> tuple[Node, bool]:
     if target.parent is None:
-        return target
+        return target, False
 
     if target.type not in subtrees:
-        return target
+        return target, False
 
     if target.type == "Literal" or target.type == "Identifier":
         new_node = random_value(target.parent.scope, target.parent)
@@ -86,12 +88,12 @@ def replace(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     fix_node_references(root, new_node)
     # print(target.parent)
 
-    return new_node
+    return new_node, True
 
 
-def remove(target: Node, root: Node) -> Node:
+def remove(target: Node, root: Node) -> tuple[Node, bool]:
     if target.parent is None:
-        return target
+        return target, False
 
     # print(target)
     # print(target.parent)
@@ -103,7 +105,7 @@ def remove(target: Node, root: Node) -> Node:
             for i, item in enumerate(val):
                 if item is target:
                     if field in non_empty_nodes and len(val) == 1:
-                        return target
+                        return target, False
 
                     val.pop(i)
 
@@ -114,18 +116,18 @@ def remove(target: Node, root: Node) -> Node:
                     # Fix references in all nodes as we may have removed function/variable declarations
                     fix_node_references(root, target.parent)
 
-                    return target.parent
+                    return target.parent, True
         elif val is target:
-            return target
+            return target, False
 
     # print(target)
     # print(target.parent)
     raise ValueError("Could not find target in parent")
 
 
-def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
+def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> tuple[Node, bool]:
     if target.type not in node_add_types:
-        return target
+        return target, False
 
     field, types = node_add_types[target.type]
     for t in types:
@@ -138,7 +140,7 @@ def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
     ]
 
     if len(types_name) == 0:
-        return target
+        return target, False
 
     add_type = np.random.choice(types_name)
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
@@ -150,9 +152,9 @@ def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> Node:
 
     scope_analysis(root)
     # Only fix references of new node since we are adding it to the tree
-    fix_node_references(new_node, new_node)
+    fix_node_references(new_node)
 
-    return new_node
+    return new_node, True
 
 
 BINARY_OPERATORS = ["+", "-", "*", "/", "%", "**", "<<", ">>", ">>>", "&", "|", "^"]

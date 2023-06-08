@@ -63,15 +63,15 @@ class ProgramState:
 
         return True
 
-    def replace(self, subtrees: dict[str, list[Node]]) -> Node:
+    def replace(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REPLACE)
         return replace(subtrees, self.target_node, self.program)
 
-    def add(self, subtrees: dict[str, list[Node]]) -> Node:
+    def add(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.ADD)
         return add(subtrees, self.target_node, self.program)
 
-    def remove(self) -> Node:
+    def remove(self) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REMOVE)
         return remove(self.target_node, self.program)
 

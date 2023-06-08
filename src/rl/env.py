@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 import gymnasium as gym
 from gymnasium import spaces
-from js_ast.analysis import count_statements
+from js_ast.analysis import count_statements, scope_analysis
 from js_ast.nodes import Node
 import numpy as np
 from rl.fuzzing_action import FuzzingAction
@@ -179,6 +179,8 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
 
         # Choose the agent's location uniformly at random
         self._state = copy.deepcopy(random.choice(self.corpus))
+        scope_analysis(self._state.program)
+
         # Initialise state as random child of the root node
         self._state.move_down()
         self.num_mutations = 0
@@ -198,7 +200,6 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             f"Number of mutations: {self.num_mutations}, action: {FuzzingAction(action)}"
         )
         self.total_actions += 1
-        new_node = self._state.target_node
 
         match (action):
             case FuzzingAction.MOVE_UP:
@@ -208,20 +209,19 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             case FuzzingAction.END:
                 return self._end()
             case FuzzingAction.REPLACE:
-                new_node = self._state.replace(self.subtrees)
-                changed = new_node is not self._state.target_node
+                new_node, changed = self._state.replace(self.subtrees)
             case FuzzingAction.ADD:
-                new_node = self._state.add(self.subtrees)
-                changed = new_node is not self._state.target_node
+                new_node, changed = self._state.add(self.subtrees)
             case FuzzingAction.REMOVE:
-                new_node = self._state.remove()
-                changed = new_node is not self._state.target_node
+                new_node, changed = self._state.remove()
             case FuzzingAction.MODIFY:
                 changed = self._state.modify()
                 new_node = self._state.target_node
             case _:
                 raise ValueError(f"Invalid action: {action}")
+
         self.num_mutations += 1
+
         if not changed:
             # Negative reward for action which does not change the state
             return (
