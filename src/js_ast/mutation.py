@@ -2,14 +2,27 @@ import copy
 import random
 from typing import Tuple
 
+from js_ast.analysis import fix_node_references
+from js_ast.analysis import random_value
+from js_ast.analysis import scope_analysis
+from js_ast.nodes import AssignmentExpression
+from js_ast.nodes import AssignmentProperty
+from js_ast.nodes import BinaryExpression
+from js_ast.nodes import Expression
+from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import Identifier
+from js_ast.nodes import ImportOrExportDeclaration
+from js_ast.nodes import Literal
+from js_ast.nodes import Node
+from js_ast.nodes import Pattern
+from js_ast.nodes import Property
+from js_ast.nodes import RestElement
+from js_ast.nodes import SpreadElement
+from js_ast.nodes import Statement
+from js_ast.nodes import SwitchCase
+from js_ast.nodes import VariableDeclarator
 import numpy as np
 
-from js_ast.analysis import fix_node_references, random_value, scope_analysis
-from js_ast.nodes import (AssignmentExpression, AssignmentProperty,
-                          BinaryExpression, Expression, ExpressionStatement,
-                          Identifier, ImportOrExportDeclaration, Literal, Node,
-                          Pattern, Property, RestElement, SpreadElement,
-                          Statement, SwitchCase, VariableDeclarator)
 
 node_add_types: dict[str, Tuple[str, list[Node]]] = {
     "Program": ("body", [Statement, ImportOrExportDeclaration]),

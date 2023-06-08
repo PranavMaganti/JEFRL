@@ -9,7 +9,6 @@ import time
 import traceback
 
 import numpy as np
-
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv

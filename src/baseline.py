@@ -9,7 +9,6 @@ import sys
 import traceback
 
 import numpy as np
-
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 
@@ -80,7 +79,7 @@ try:
         while not done and not truncated:
             action = env.action_space.sample()
             episode_action.append((action, env._state.target_node.type))
-            
+
             next_state, reward, truncated, done, info = env.step(action)
             episode_reward.append(reward)
 
