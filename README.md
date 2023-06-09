@@ -2,6 +2,8 @@
 
 Enhancing Javascript engine fuzzing with the use of Reinforcement Learning
 
+To clone the repo with all the preprocessed files you will first have to install [git-lfs](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage).
+
 To run the code, you need to first install [poetry](https://python-poetry.org/) and then run the following commands which setup a virtual environment and install all the dependencies:
 
 ```bash
