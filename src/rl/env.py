@@ -17,7 +17,6 @@ from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
 from rl.tokenizer import ASTTokenizer
 import torch
-from tqdm import tqdm
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine

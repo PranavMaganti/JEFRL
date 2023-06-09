@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import pickle
 import sys
-import time
 import traceback
 
 import numpy as np
@@ -205,6 +204,7 @@ try:
 
         episode_coverage.append(env.total_coverage.coverage())
         episode_rewards.append(episode_reward)
+        episode_actions.append(episode_action)
 
 
 except Exception as e:

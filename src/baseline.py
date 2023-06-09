@@ -111,6 +111,7 @@ try:
 
         episode_rewards.append(episode_reward)
         episode_coverage.append(env.total_coverage.coverage())
+        episode_actions.append(episode_action)
         logging.info(f"Episode reward: {sum(episode_reward)}")
 
 except Exception as e:
