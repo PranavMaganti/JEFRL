@@ -132,34 +132,34 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         penalty = min(0, 1 - num_statements / self.max_statements)
 
         if exec_data is None:
-            return (
-                self._state.exec_data.coverage.hit_edges / self.total_coverage.hit_edges
-            ) + penalty
+            return penalty
 
-        new_coverage = exec_data.coverage | self.total_coverage
+        new_total_coverage = exec_data.coverage | self.total_coverage
 
         if exec_data.is_crash():
-            self.total_coverage = new_coverage
+            self.total_coverage = new_total_coverage
             logging.info(f"Crash detected: {exec_data.out}")
             self.save_current_state("crash")
             return 3 + penalty
 
-        if new_coverage == self.total_coverage:
-            # new coverage is the same as the current coverage
-            return (
-                exec_data.coverage.hit_edges / self.total_coverage.hit_edges
-            ) + penalty
+        if exec_data.coverage.hit_edges <= self._state.exec_data.coverage.hit_edges:
+            # new test case did not increase its own coverage
+            return -1 + penalty
+        elif new_total_coverage == self.total_coverage:
+            # reward increasing coverage of test case but less than the reward for
+            # increasing total coverage
+            return 1 + penalty
         else:
-            # new coverage has increased total coverage
+            # new test case increased its own coverage and the total coverage
             self.coverage_increased = True
             logging.info(
-                f"Coverage increased from {self.total_coverage} to {new_coverage}"
+                f"Coverage increased from {self.total_coverage} to {new_total_coverage}"
             )
             self.save_current_state("coverage")
             self.corpus.append(self._state)
-            self.total_coverage = new_coverage
+            self.total_coverage = new_total_coverage
 
-            return 1 + penalty
+            return 2 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()
@@ -249,10 +249,10 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             # Negative reward for invalid program
             return self._get_obs(), -1, self._get_truncated(), True, self._get_info()
 
-        self._state.exec_data = exec_data
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
 
+        self._state.exec_data = exec_data
         return self._get_obs(), reward, self._get_truncated(), done, self._get_info()
 
     def _move_up(

@@ -169,7 +169,6 @@ try:
                 tokenizer,
                 optimizer,
                 memory,
-                batch_size=32,
                 device=device,
             )
             soft_update_params(policy_net, target_net)
