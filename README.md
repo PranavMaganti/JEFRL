@@ -2,10 +2,15 @@
 
 Enhancing Javascript engine fuzzing with the use of Reinforcement Learning
 
-To clone the repo with all the preprocessed files you will first have to install [git-lfs](https://docs.github.com/en/repositories/working-with-files/managing-large-files/installing-git-large-file-storage).
+Before running the code you will need to build the JavaScript engine by running the following commands (docker required):
+```bash
+cd engines/v8
+docker build -t v8-build .
+docker run -it -v .:/v8 v8-build /v8/build.sh
+sudo chown -R $USER:$USER . # to change ownership of the files created by docker back to the user
+```
 
-To run the code, you need to first install [poetry](https://python-poetry.org/) and then run the following commands which setup a virtual environment and install all the dependencies:
-
+To run the code, you need to first need a working version of python3.11 on your machine and you will then need to install [poetry](https://python-poetry.org/). The program can then be run the following commands which setup a virtual environment and install all python dependencies:
 ```bash
 poetry shell
 poetry install

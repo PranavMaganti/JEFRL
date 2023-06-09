@@ -129,7 +129,13 @@ dmypy.json
 .pyre/
 
 # Javascript engines
-engines/*
+engines/v8/v8
+engines/v8/depot_tools
+engines/v8/.gclient
+engines/v8/.gclient_entries
+engines/v8/.gclient_previous_sync_commits
+engines/v8/.cipd
+
 
 # VSCode
 .vscode/
@@ -137,7 +143,9 @@ engines/*
 # Pre-processed data
 corpus/**/*.pkl
 corpus/**/*.ast
+corpus/DIE
 corpus/interesting
+
 
 ASTBERTa/**
 data/**
