@@ -95,7 +95,6 @@ def replace(
         raise ValueError("Could not find target in parent")
 
     print(target.parent)
-    # print(target)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root, new_node)

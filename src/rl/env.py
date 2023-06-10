@@ -10,14 +10,14 @@ from typing import Any, Optional
 
 import gymnasium as gym
 from gymnasium import spaces
-from js_ast.analysis import count_statements, scope_analysis
+from js_ast.analysis import count_statements
+from js_ast.analysis import scope_analysis
 from js_ast.nodes import Node
 import numpy as np
 from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
 from rl.tokenizer import ASTTokenizer
 import torch
-import numpy as np
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine
@@ -28,7 +28,8 @@ STATEMENT_PENALTY_WEIGHT = 3
 COVERAGE_REWARD_WEIGHT = 2
 MAX_STATEMENTS = 100
 
-class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
+
+class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
     metadata = {}
 
     def __init__(
@@ -44,12 +45,9 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
-        # self.observation_space = spaces.Tuple(
-        #     (
-        #         spaces.Text(max_length=10000),
-        #         spaces.Text(max_length=10000),
-        #     )
-        # )exec_data.coverage.hit_edges / self.total_coverage.hit_edges + penalty
+        self.observation_space = spaces.MultiDiscrete(
+            np.full((2, tokenizer.max_len), len(tokenizer.vocab))
+        )  # type: ignore
         self.render_mode = render_mode
 
         self.corpus = corpus
@@ -117,14 +115,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             self.save_current_state("crash")
             return 3 + penalty
 
-        if exec_data.coverage.hit_edges <= self._state.exec_data.coverage.hit_edges:
-            # new test case did not increase its own coverage
-            return -1 + penalty
-        elif new_total_coverage == self.total_coverage:
-            # reward increasing coverage of test case but less than the reward for
-            # increasing total coverage
-            return 1 + penalty
-        else:
+        if new_total_coverage != self.total_coverage:
             # new test case increased its own coverage and the total coverage
             self.coverage_increased = True
             logging.info(
@@ -136,6 +127,13 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             self.total_coverage = new_total_coverage
 
             return 2 + penalty
+        elif exec_data.coverage.hit_edges > self._state.exec_data.coverage.hit_edges:
+            # reward increasing coverage of test case but less than the reward for
+            # increasing total coverage
+            return 1 + penalty
+        else:
+            # new test case did not increase its own coverage
+            return -1 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()
@@ -183,10 +181,8 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self.total_actions += 1
 
         match (action):
-            case FuzzingAction.MOVE_UP:
-                return self._move_up()
-            case FuzzingAction.MOVE_DOWN:
-                return self._move_down()
+            case FuzzingAction.MOVE_UP | FuzzingAction.MOVE_DOWN | FuzzingAction.MOVE_LEFT | FuzzingAction.MOVE_RIGHT:
+                return self._move(action)
             case FuzzingAction.END:
                 return self._end()
             case FuzzingAction.REPLACE:
@@ -201,8 +197,6 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             case _:
                 raise ValueError(f"Invalid action: {action}")
 
-        self.num_mutations += 1
-
         if not changed:
             # Negative reward for action which does not change the state
             return (
@@ -213,6 +207,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
                 self._get_info(),
             )
 
+        self.num_mutations += 1
         self._state.target_node = new_node
         code = self._state.generate_program_code()
         if not code:
@@ -237,23 +232,24 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self._state.exec_data = exec_data
         return self._get_obs(), reward, self._get_truncated(), done, self._get_info()
 
-    def _move_up(
-        self,
+    def _move(
+        self, action: FuzzingAction
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
-        return (
-            self._get_obs(),
-            self._get_reward() if self._state.move_up() else -1,
-            self._get_truncated(),
-            self._get_done(),
-            self._get_info(),
-        )
+        match (action):
+            case FuzzingAction.MOVE_UP:
+                moved = self._state.move_up()
+            case FuzzingAction.MOVE_DOWN:
+                moved = self._state.move_down()
+            case FuzzingAction.MOVE_LEFT:
+                moved = self._state.move_left()
+            case FuzzingAction.MOVE_RIGHT:
+                moved = self._state.move_right()
+            case _:
+                raise ValueError(f"Invalid action: {action}")
 
-    def _move_down(
-        self,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
-            self._get_reward() if self._state.move_down() else -1,
+            self._get_reward() if moved else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),

@@ -8,7 +8,9 @@ class FuzzingAction(IntEnum):
     MODIFY = 3
     MOVE_UP = 4
     MOVE_DOWN = 5
-    END = 6
+    MOVE_LEFT = 6
+    MOVE_RIGHT = 7
+    END = 8
 
     def __str__(self):
         match self:
@@ -24,5 +26,9 @@ class FuzzingAction(IntEnum):
                 return "Move Up"
             case FuzzingAction.MOVE_DOWN:
                 return "Move Down"
+            case FuzzingAction.MOVE_LEFT:
+                return "Move Left"
+            case FuzzingAction.MOVE_RIGHT:
+                return "Move Right"
             case FuzzingAction.END:
                 return "End"

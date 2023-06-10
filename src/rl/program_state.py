@@ -51,6 +51,9 @@ class ProgramState:
 
     def move_down(self) -> bool:
         self.action_history.append(FuzzingAction.MOVE_DOWN)
+        if self.target_node.parent is None:
+            return False
+
         children = self.target_node.children()
         if not children:
             return False
@@ -63,6 +66,39 @@ class ProgramState:
         self.target_node = random.choice(children)
 
         return True
+
+    def move_left(self) -> bool:
+        self.action_history.append(FuzzingAction.MOVE_LEFT)
+        if self.target_node.parent is None:
+            return False
+
+        parent_children = self.target_node.parent.children()
+
+        if len(parent_children) <= 1:
+            return False
+
+        for i, child in enumerate(parent_children):
+            if child == self.target_node:
+                self.target_node = parent_children[(i - 1) % len(parent_children)]
+                return True
+
+        raise Exception("Could not move left in parent. This should not happen.")
+
+    def move_right(self) -> bool:
+        self.action_history.append(FuzzingAction.MOVE_RIGHT)
+        if self.target_node.parent is None:
+            return False
+
+        parent_children = self.target_node.parent.children()
+        if len(parent_children) <= 1:
+            return False
+
+        for i, child in enumerate(parent_children):
+            if child == self.target_node:
+                self.target_node = parent_children[(i + 1) % len(parent_children)]
+                return True
+
+        raise Exception("Could not move right in parent. This should not happen.")
 
     def replace(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REPLACE)

@@ -3,14 +3,17 @@ import math
 import random
 
 import numpy as np
-import torch
-import torch.nn.functional as F
-from torch import nn, optim
-from transformers import RobertaModel
-
-from rl.dqn import DQN, BatchTransition, ReplayMemory
+from rl.dqn import BatchTransition
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
+import torch
+from torch import nn
+from torch import optim
+import torch.nn.functional as F
+from transformers import RobertaModel
+
 
 NUM_TRAINING_STEPS = 100000  # Number of episodes to train the agent for
 LR = 5e-4  # Learning rate of the AdamW optimizer
@@ -21,12 +24,11 @@ EPS_END = 0.05
 EPS_DECAY = 20000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 28  # Number of transitions sampled from the replay buffer
 GAMMA = 0.90  # Discount factor as mentioned in the previous section
-TAU = 0.001  # Update rate of the target network
+TAU = 0.005  # Update rate of the target network
 
-# Weights for each action in epsilon-greedy policy. Biased towards up and down
-# actions to get more exploration of the whole AST and reduce probability of 
+# Weights for each action in epsilon-greedy policy to reduce probability of
 # ending the episode early
-ACTION_WEIGHTS = [1, 1, 1, 1, 1.1, 1.2, 0.2]
+ACTION_WEIGHTS = [1, 1, 1, 1, 1, 1, 1, 1, 0.2]
 
 
 # Select action based on epsilon-greedy policy
@@ -116,22 +118,31 @@ def optimise_model(
     reward_batch = torch.tensor(batch.rewards).to(device)
 
     current_state_values = policy_net(states_batch).gather(1, action_batch).squeeze(1)
-    next_state_values = torch.zeros(batch_size, device=device)
+    # next_state_values = torch.zeros(batch_size, device=device)
 
+    # with torch.no_grad():
+    #     non_final_next_states = [s for s in batch.next_states if s is not None]
+    #     non_final_next_states = get_state_embedding(
+    #         non_final_next_states, ast_net, ast_tokenizer, device
+    #     )
+    #     non_final_next_actions = policy_net(non_final_next_states).argmax(
+    #         1, keepdim=True
+    #     )
+
+    #     next_state_values[non_final_mask] = (
+    #         target_net(non_final_next_states)
+    #         .gather(1, non_final_next_actions)
+    #         .squeeze(1)
+    #     )
+
+    next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
         non_final_next_states = [s for s in batch.next_states if s is not None]
         non_final_next_states = get_state_embedding(
             non_final_next_states, ast_net, ast_tokenizer, device
         )
-        non_final_next_actions = policy_net(non_final_next_states).argmax(
-            1, keepdim=True
-        )
 
-        next_state_values[non_final_mask] = (
-            target_net(non_final_next_states)
-            .gather(1, non_final_next_actions)
-            .squeeze(1)
-        )
+        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
 
     del states_batch
     del action_batch
