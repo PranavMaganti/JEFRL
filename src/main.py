@@ -1,5 +1,6 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
 from datetime import datetime
+import json
 import logging
 import os
 from pathlib import Path
@@ -13,7 +14,19 @@ from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import epsilon_greedy
+from rl.train import (
+    ACTION_WEIGHTS,
+    BATCH_SIZE,
+    EPS_DECAY,
+    EPS_END,
+    EPS_START,
+    GAMMA,
+    LR,
+    NUM_TRAINING_STEPS,
+    REPLAY_MEMORY_SIZE,
+    TAU,
+    epsilon_greedy,
+)
 from rl.train import optimise_model
 from rl.train import soft_update_params
 import torch
@@ -23,6 +36,9 @@ from transformers import RobertaModel
 
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
+INTERESTING_FOLDER = Path("corpus/interesting")
+MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
 
 
 # System setup
@@ -46,9 +62,6 @@ total_coverage = data["total_coverage"]
 vocab = vocab_data["vocab"]
 token_to_id = vocab_data["token_to_id"]
 
-LR = 1e-4  # Learning rate of the AdamW optimizer
-NUM_EPISODES = 10000  # Number of episodes to train the agent for
-MAX_LEN = 512  # Maximum length of the AST fragment sequence
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -67,11 +80,12 @@ config = RobertaConfig(
     num_attention_heads=num_attention_heads,
     intermediate_size=intermediate_size,
     hidden_dropout_prob=dropout,
-    max_position_embeddings=MAX_LEN + 2,
+    max_position_embeddings=MAX_FRAGMENT_SEQ_LEN + 2,
 )
 
+
 # Load the ASTBERTa model
-tokenizer = ASTTokenizer(vocab, token_to_id, MAX_LEN)
+tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN)
 pretrained_model = torch.load("ASTBERTa/models/final/model_28000.pt")
 
 if isinstance(pretrained_model, torch.nn.DataParallel):
@@ -90,28 +104,24 @@ assert isinstance(config, RobertaConfig)
 # assert isinstance(ast_net, RobertaModel)
 
 
-# Get number of actions from gym action space
-n_actions = len(FuzzingAction)
-
-# Number of observations is the size of the hidden state of the LSTM for both
-# the target and context code
-n_observations = hidden_size * 2
-
 # Initialise policy and target networks
 logging.info("Initialising policy and target networks")
+
+# Get number of actions from gym action space
+n_actions = len(FuzzingAction)
+# Input size to the DQN is the size of the ASTBERTa hidden state * 2 (target and context)
+n_observations = hidden_size * 2
+
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
-
-# policy_net = torch.nn.DataParallel(policy_net, device_ids=[0, 1])
-# target_net = torch.nn.DataParallel(target_net, device_ids=[0, 1])
 
 optimizer = optim.AdamW(
     [*ast_net.parameters(), *policy_net.parameters()],
     lr=LR,
     amsgrad=True,
 )
-memory = ReplayMemory(5000)
+memory = ReplayMemory(REPLAY_MEMORY_SIZE)
 
 # Setup environment
 start = datetime.now()
@@ -119,9 +129,34 @@ save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
 data_save_folder = Path("data/") / save_folder_name
 os.makedirs(data_save_folder, exist_ok=True)
 
-logging.info("Setting up environment")
-INTERESTING_FOLDER = Path("corpus/interesting")
+# Save hyperparameters
+with open(data_save_folder / "hyperparameters.json", "w") as f:
+    json.dumps(
+        {
+            "num_training_steps": NUM_TRAINING_STEPS,
+            "replay_memory_size": REPLAY_MEMORY_SIZE,
+            "learning_rate": LR,
+            "max_fragment_seq_len": MAX_FRAGMENT_SEQ_LEN,
+            "astberta_config": {
+                "vocab_size": vocab_size,
+                "intermediate_size": intermediate_size,
+                "hidden_size": hidden_size,
+                "num_hidden_layers": num_hidden_layers,
+                "num_attention_heads": num_attention_heads,
+                "dropout": dropout,
+            },
+            "eps_start": EPS_START,
+            "eps_end": EPS_END,
+            "eps_decay": EPS_DECAY,
+            "gamma": GAMMA,
+            "batch_size": BATCH_SIZE,
+            "tau": TAU,
+            "action_weights": ACTION_WEIGHTS,
+        }
+    )
 
+
+logging.info("Setting up environment")
 engine = V8Engine()
 env = FuzzingEnv(
     corpus,
@@ -133,8 +168,6 @@ env = FuzzingEnv(
 )
 
 logging.info("Starting training")
-
-
 total_steps = 0
 initial_coverage = env.total_coverage.coverage()
 
@@ -143,8 +176,10 @@ execution_coverage: dict[tuple[int, int], float] = {}
 episode_coverage: list[float] = [initial_coverage]
 episode_actions: list[list[tuple[int, str]]] = []
 
+losses: list[float] = []
+
 try:
-    for ep in range(NUM_EPISODES):
+    while total_steps < NUM_TRAINING_STEPS:
         state, info = env.reset()
         done, truncated = False, False
         episode_reward: list[float] = []
@@ -162,7 +197,7 @@ try:
             total_steps += 1
 
             memory.push(state, action, next_state, reward)
-            optimise_model(
+            loss = optimise_model(
                 policy_net,
                 target_net,
                 ast_net,
@@ -172,6 +207,8 @@ try:
                 device=device,
             )
             soft_update_params(policy_net, target_net)
+
+            losses.append(loss)
 
             state = next_state
             if total_steps % 100 == 0:
@@ -192,11 +229,13 @@ try:
                         {
                             "episode_actions": episode_actions,
                             "episode_rewards": episode_rewards,
+                            "episode_coverage": episode_coverage,
                             "execution_coverage": execution_coverage,
                             "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
                             "running_time": datetime.now() - start,
+                            "losses": losses,
                         },
                         f,
                     )

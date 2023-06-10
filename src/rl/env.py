@@ -17,6 +17,7 @@ from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
 from rl.tokenizer import ASTTokenizer
 import torch
+import numpy as np
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine
@@ -26,34 +27,6 @@ from utils.js_engine import ExecutionData
 STATEMENT_PENALTY_WEIGHT = 3
 COVERAGE_REWARD_WEIGHT = 2
 MAX_STATEMENTS = 100
-
-
-class FuzzingAction(IntEnum):
-    REPLACE = 0
-    ADD = 1
-    REMOVE = 2
-    MODIFY = 3
-    MOVE_UP = 4
-    MOVE_DOWN = 5
-    END = 6
-
-    def __str__(self):
-        match self:
-            case FuzzingAction.REPLACE:
-                return "Replace"
-            case FuzzingAction.ADD:
-                return "Add"
-            case FuzzingAction.REMOVE:
-                return "Remove"
-            case FuzzingAction.MODIFY:
-                return "Modify"
-            case FuzzingAction.MOVE_UP:
-                return "Move Up"
-            case FuzzingAction.MOVE_DOWN:
-                return "Move Down"
-            case FuzzingAction.END:
-                return "End"
-
 
 class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
     metadata = {}
@@ -80,6 +53,8 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         self.render_mode = render_mode
 
         self.corpus = corpus
+        self.corpus_selection_count = [1 for _ in corpus]
+
         self.subtrees = subtrees
         self.engine = engine
 
@@ -157,6 +132,7 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
             )
             self.save_current_state("coverage")
             self.corpus.append(self._state)
+            self.corpus_selection_count.append(1)
             self.total_coverage = new_total_coverage
 
             return 2 + penalty
@@ -176,8 +152,14 @@ class FuzzingEnv(gym.Env[tuple[Node, Node], np.int64]):
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
 
-        # Choose the agent's location uniformly at random
-        self._state = copy.deepcopy(random.choice(self.corpus))
+        # We want to choose a program state with low selection count
+        program_state_counts = np.array(self.corpus_selection_count)
+        inverted_counts = (np.max(program_state_counts) + 1) - program_state_counts
+        weights = inverted_counts / np.sum(inverted_counts)
+        program_state_idx = self.np_random.choice(len(self.corpus), p=weights)
+
+        self.corpus_selection_count[program_state_idx] += 1
+        self._state = copy.deepcopy(self.corpus[program_state_idx])
         scope_analysis(self._state.program)
 
         # Initialise state as random child of the root node

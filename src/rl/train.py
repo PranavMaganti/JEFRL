@@ -12,14 +12,21 @@ from rl.dqn import DQN, BatchTransition, ReplayMemory
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 
-EPS_START = 0.95  # Starting value of epsilon
+NUM_TRAINING_STEPS = 100000  # Number of episodes to train the agent for
+LR = 5e-4  # Learning rate of the AdamW optimizer
+REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
+
+EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 6000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+EPS_DECAY = 20000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 28  # Number of transitions sampled from the replay buffer
 GAMMA = 0.90  # Discount factor as mentioned in the previous section
-TAU = 0.005  # Update rate of the target network
+TAU = 0.001  # Update rate of the target network
 
-ACTION_WEIGHTS = [1, 1, 1, 1, 1.1, 1.3, 0.2]
+# Weights for each action in epsilon-greedy policy. Biased towards up and down
+# actions to get more exploration of the whole AST and reduce probability of 
+# ending the episode early
+ACTION_WEIGHTS = [1, 1, 1, 1, 1.1, 1.2, 0.2]
 
 
 # Select action based on epsilon-greedy policy
@@ -89,7 +96,7 @@ def optimise_model(
     device: torch.device,
     batch_size: int = BATCH_SIZE,
     gamma: float = GAMMA,
-):
+) -> float:
     # If the replay buffer is not full, do not optimise
     if len(memory) < batch_size:
         return
@@ -107,18 +114,6 @@ def optimise_model(
     states_batch = get_state_embedding(batch.states, ast_net, ast_tokenizer, device)
     action_batch = torch.tensor(batch.actions).view(-1, 1).to(device)
     reward_batch = torch.tensor(batch.rewards).to(device)
-
-    # # Encode the state and get the Q values for the actions taken
-    # state_action_values = policy_net(states_batch).gather(1, action_batch)
-
-    # next_state_values = torch.zeros(batch_size, device=device)
-    # with torch.no_grad():
-    #     non_final_next_states = [s for s in batch.next_states if s is not None]
-    #     non_final_next_states = get_state_embedding(
-    #         non_final_next_states, ast_net, ast_tokenizer, device
-    #     )
-
-    #     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
 
     current_state_values = policy_net(states_batch).gather(1, action_batch).squeeze(1)
     next_state_values = torch.zeros(batch_size, device=device)
@@ -156,8 +151,10 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 1)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 5)  # type: ignore
     optimizer.step()
+
+    loss_value = loss.item()
 
     del reward_batch
 
@@ -166,3 +163,5 @@ def optimise_model(
 
     del expected_state_action_values
     del loss
+
+    return loss_value

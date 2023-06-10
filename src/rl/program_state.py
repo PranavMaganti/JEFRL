@@ -25,6 +25,7 @@ class ProgramState:
         "target_node",
         "context_node",
         "action_history",
+        "num_mutation_episodes",
     ]
 
     def __init__(self, program: Node, exec_data: ExecutionData):
