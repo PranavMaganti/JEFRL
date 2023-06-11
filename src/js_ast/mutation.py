@@ -62,7 +62,7 @@ def replace(
         return target, False
 
     if target.type == "Literal" or target.type == "Identifier":
-        new_node = random_value(target.parent.scope, target.parent)
+        new_node = random_value(target.parent.scope, target.parent, subtrees)
     else:
         new_node = copy.deepcopy(random.choice(subtrees[target.type]))
         new_node.parent = target.parent
@@ -97,13 +97,15 @@ def replace(
     print(target.parent)
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
-    fix_node_references(root, new_node)
+    fix_node_references(root, subtrees, new_node)
     print(target.parent)
 
     return new_node, True
 
 
-def remove(target: Node, root: Node) -> tuple[Node, bool]:
+def remove(
+    subtrees: dict[str, list[Node]], target: Node, root: Node
+) -> tuple[Node, bool]:
     if target.parent is None:
         return target, False
 
@@ -126,7 +128,7 @@ def remove(target: Node, root: Node) -> tuple[Node, bool]:
                     print(target.parent)
                     print(target)
                     # Fix references in all nodes as we may have removed function/variable declarations
-                    fix_node_references(root, target.parent)
+                    fix_node_references(root, subtrees, target.parent)
 
                     return target.parent, True
         elif val is target:
@@ -164,7 +166,7 @@ def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> tuple[Node
 
     scope_analysis(root)
     # Only fix references of new node since we are adding it to the tree
-    fix_node_references(new_node)
+    fix_node_references(new_node, subtrees)
 
     return new_node, True
 

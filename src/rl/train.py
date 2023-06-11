@@ -20,7 +20,7 @@ REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 20000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+EPS_DECAY = 12000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
 GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
@@ -115,8 +115,8 @@ def optimise_model(
     )
 
     states_batch = get_state_embedding(batch.states, ast_net, ast_tokenizer, device)
-    action_batch = torch.tensor(batch.actions, device = device).view(-1, 1)
-    reward_batch = torch.tensor(batch.rewards, device = device)
+    action_batch = torch.tensor(batch.actions, device=device).view(-1, 1)
+    reward_batch = torch.tensor(batch.rewards, device=device)
 
     current_state_values = policy_net(states_batch).gather(1, action_batch).squeeze(1)
     next_state_values = torch.zeros(batch_size, device=device)

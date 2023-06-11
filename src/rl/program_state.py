@@ -108,9 +108,9 @@ class ProgramState:
         self.action_history.append(FuzzingAction.ADD)
         return add(subtrees, self.target_node, self.program)
 
-    def remove(self) -> tuple[Node, bool]:
+    def remove(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REMOVE)
-        return remove(self.target_node, self.program)
+        return remove(subtrees, self.target_node, self.program)
 
     def modify(self) -> bool:
         self.action_history.append(FuzzingAction.MODIFY)

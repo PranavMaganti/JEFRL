@@ -14,13 +14,14 @@ from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import ACTION_WEIGHTS, GRAD_ACCUMULATION_STEPS
+from rl.train import ACTION_WEIGHTS
 from rl.train import BATCH_SIZE
 from rl.train import EPS_DECAY
 from rl.train import EPS_END
 from rl.train import EPS_START
 from rl.train import epsilon_greedy
 from rl.train import GAMMA
+from rl.train import GRAD_ACCUMULATION_STEPS
 from rl.train import LR
 from rl.train import NUM_TRAINING_STEPS
 from rl.train import optimise_model
@@ -207,7 +208,7 @@ try:
                 optimizer,
                 memory,
                 device,
-                total_steps
+                total_steps,
             )
             soft_update_params(policy_net, target_net)
 

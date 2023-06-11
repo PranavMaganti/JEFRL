@@ -11,6 +11,7 @@ from js_ast.nodes import FunctionDeclaration
 from js_ast.nodes import FunctionExpression
 from js_ast.nodes import Identifier
 from js_ast.nodes import Literal
+from js_ast.nodes import MemberExpression
 from js_ast.nodes import Node
 from js_ast.nodes import Program
 from js_ast.nodes import Statement
@@ -145,8 +146,13 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
 
 # Fixes the node by replacing identifiers and function calls with available variables and
 # functions
-def fix_node_references(node: Node, target: Optional[Node] = None):
+def fix_node_references(
+    node: Node, subtrees: dict[str, list[Node]], target: Optional[Node] = None
+):
     if isinstance(node, Identifier):
+        if isinstance(node.parent, MemberExpression) and node.parent.object != node:
+            return
+
         scope = node.parent.scope
 
         if not scope:
@@ -168,17 +174,26 @@ def fix_node_references(node: Node, target: Optional[Node] = None):
             node.callee.name = function
             if target and target.parent == node:
                 node.arguments = [target] + [
-                    random_value(scope, node) for _ in range(num_params - 1)
+                    random_value(scope, node, subtrees) for _ in range(num_params - 1)
                 ]
             else:
-                node.arguments = [random_value(scope, node) for _ in range(num_params)]
+                node.arguments = [
+                    random_value(scope, node, subtrees) for _ in range(num_params)
+                ]
+        else:
+            for node in node.arguments:
+                fix_node_references(node, subtrees, target)
     else:
         for child in node.children():
-            fix_node_references(child)
+            fix_node_references(child, subtrees, target)
 
 
 # Gets random literal or identifier
-def random_value(scope: Scope, parent: Node):
+def random_value(scope: Scope, parent: Node, subtrees: dict[str, list[Node]]):
+    if random.random() < 0.25:
+        new_node = random.choice(subtrees["Literal"])
+        new_node.parent = parent
+
     if scope.available_variables() and random.random() < 0.5:
         return Identifier(
             name=random.choice(list(scope.available_variables())),

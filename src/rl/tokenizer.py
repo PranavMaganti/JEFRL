@@ -54,7 +54,7 @@ class ASTTokenizer:
         self, batch: Iterable[torch.Tensor], device: torch.device
     ) -> dict[str, torch.Tensor]:
         inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True)
-        attention_mask = torch.ones_like(inputs, device = device)
+        attention_mask = torch.ones_like(inputs, device=device)
         attention_mask[inputs == self.token_to_id[PAD_TOKEN]] = 0
 
         return {

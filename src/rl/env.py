@@ -190,7 +190,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
             case FuzzingAction.ADD:
                 new_node, changed = self._state.add(self.subtrees)
             case FuzzingAction.REMOVE:
-                new_node, changed = self._state.remove()
+                new_node, changed = self._state.remove(self.subtrees)
             case FuzzingAction.MODIFY:
                 changed = self._state.modify()
                 new_node = self._state.target_node

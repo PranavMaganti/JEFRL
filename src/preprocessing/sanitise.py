@@ -3,6 +3,7 @@ from typing import Any
 
 from js_ast.nodes import CallExpression
 from js_ast.nodes import ExpressionStatement
+from js_ast.nodes import MemberExpression
 from js_ast.nodes import Node
 from js_ast.nodes import ThrowStatement
 
@@ -10,7 +11,17 @@ from js_ast.nodes import ThrowStatement
 def sanitise_node(node: Node) -> bool:
     if isinstance(node, ExpressionStatement):
         if isinstance(node.expression, CallExpression):
-            if node.expression.callee.name and "assert" in node.expression.callee.name:
+            if node.expression.callee.name and (
+                "assert" in node.expression.callee.name
+                or "print" in node.expression.callee.name
+            ):
+                return True
+
+            if (
+                isinstance(node.expression.callee, MemberExpression)
+                and node.expression.callee.object.name == "console"
+                and node.expression.callee.property.name == "log"
+            ):
                 return True
 
     if isinstance(node, ThrowStatement):
