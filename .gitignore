@@ -129,12 +129,13 @@ dmypy.json
 .pyre/
 
 # Javascript engines
-engines/v8/v8
-engines/v8/depot_tools
-engines/v8/.gclient
-engines/v8/.gclient_entries
-engines/v8/.gclient_previous_sync_commits
-engines/v8/.cipd
+# engines/v8/v8
+# engines/v8/depot_tools
+# engines/v8/.gclient
+# engines/v8/.gclient_entries
+# engines/v8/.gclient_previous_sync_commits
+# engines/v8/.cipd
+engines/
 
 
 # VSCode

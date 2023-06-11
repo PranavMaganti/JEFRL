@@ -72,7 +72,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
         self.tokenizer = tokenizer
 
-    def save_current_state(self, save_type: str):
+    def save_current_state(self, save_type: str, exec_data: ExecutionData) -> None:
         current_time = int(time.time())
 
         code = self._state.generate_program_code()
@@ -90,7 +90,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         with open(
             self.interesting_folder / f"{current_time}_{save_type}.txt", "w"
         ) as f:
-            f.write(self._state.exec_data.out)
+            f.write(exec_data.out)
 
     def _get_obs(self) -> tuple[torch.Tensor, torch.Tensor]:
         tokenized_target = self.tokenizer.tokenize(self._state.get_target_node())
@@ -112,7 +112,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         if exec_data.is_crash():
             self.total_coverage = new_total_coverage
             logging.info(f"Crash detected: {exec_data.out}")
-            self.save_current_state("crash")
+            self.save_current_state("crash", exec_data)
             return 3 + penalty
 
         if new_total_coverage != self.total_coverage:
@@ -121,7 +121,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
             logging.info(
                 f"Coverage increased from {self.total_coverage} to {new_total_coverage}"
             )
-            self.save_current_state("coverage")
+            self.save_current_state("coverage", exec_data)
             self.corpus.append(self._state)
             self.corpus_selection_count.append(1)
             self.total_coverage = new_total_coverage

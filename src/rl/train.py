@@ -15,14 +15,14 @@ import torch.nn.functional as F
 from transformers import RobertaModel
 
 
-NUM_TRAINING_STEPS = 100000  # Number of episodes to train the agent for
+NUM_TRAINING_STEPS = 75000  # Number of episodes to train the agent for
 LR = 5e-4  # Learning rate of the AdamW optimizer
 REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 20000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 28  # Number of transitions sampled from the replay buffer
+BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
 GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
@@ -101,7 +101,7 @@ def optimise_model(
 ) -> float:
     # If the replay buffer is not full, do not optimise
     if len(memory) < batch_size:
-        return
+        return 0.0
 
     transitions = memory.sample(batch_size)
     states, actions, next_states, rewards = zip(*transitions)
@@ -118,31 +118,22 @@ def optimise_model(
     reward_batch = torch.tensor(batch.rewards).to(device)
 
     current_state_values = policy_net(states_batch).gather(1, action_batch).squeeze(1)
-    # next_state_values = torch.zeros(batch_size, device=device)
-
-    # with torch.no_grad():
-    #     non_final_next_states = [s for s in batch.next_states if s is not None]
-    #     non_final_next_states = get_state_embedding(
-    #         non_final_next_states, ast_net, ast_tokenizer, device
-    #     )
-    #     non_final_next_actions = policy_net(non_final_next_states).argmax(
-    #         1, keepdim=True
-    #     )
-
-    #     next_state_values[non_final_mask] = (
-    #         target_net(non_final_next_states)
-    #         .gather(1, non_final_next_actions)
-    #         .squeeze(1)
-    #     )
-
     next_state_values = torch.zeros(batch_size, device=device)
+
     with torch.no_grad():
         non_final_next_states = [s for s in batch.next_states if s is not None]
         non_final_next_states = get_state_embedding(
             non_final_next_states, ast_net, ast_tokenizer, device
         )
+        non_final_next_actions = policy_net(non_final_next_states).argmax(
+            1, keepdim=True
+        )
 
-        next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+        next_state_values[non_final_mask] = (
+            target_net(non_final_next_states)
+            .gather(1, non_final_next_actions)
+            .squeeze(1)
+        )
 
     del states_batch
     del action_batch
@@ -162,7 +153,7 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 5)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 3)  # type: ignore
     optimizer.step()
 
     loss_value = loss.item()

@@ -130,28 +130,30 @@ os.makedirs(data_save_folder, exist_ok=True)
 
 # Save hyperparameters
 with open(data_save_folder / "hyperparameters.json", "w") as f:
-    json.dumps(
-        {
-            "num_training_steps": NUM_TRAINING_STEPS,
-            "replay_memory_size": REPLAY_MEMORY_SIZE,
-            "learning_rate": LR,
-            "max_fragment_seq_len": MAX_FRAGMENT_SEQ_LEN,
-            "astberta_config": {
-                "vocab_size": vocab_size,
-                "intermediate_size": intermediate_size,
-                "hidden_size": hidden_size,
-                "num_hidden_layers": num_hidden_layers,
-                "num_attention_heads": num_attention_heads,
-                "dropout": dropout,
-            },
-            "eps_start": EPS_START,
-            "eps_end": EPS_END,
-            "eps_decay": EPS_DECAY,
-            "gamma": GAMMA,
-            "batch_size": BATCH_SIZE,
-            "tau": TAU,
-            "action_weights": ACTION_WEIGHTS,
-        }
+    f.write(
+        json.dumps(
+            {
+                "num_training_steps": NUM_TRAINING_STEPS,
+                "replay_memory_size": REPLAY_MEMORY_SIZE,
+                "learning_rate": LR,
+                "max_fragment_seq_len": MAX_FRAGMENT_SEQ_LEN,
+                "astberta_config": {
+                    "vocab_size": vocab_size,
+                    "intermediate_size": intermediate_size,
+                    "hidden_size": hidden_size,
+                    "num_hidden_layers": num_hidden_layers,
+                    "num_attention_heads": num_attention_heads,
+                    "dropout": dropout,
+                },
+                "eps_start": EPS_START,
+                "eps_end": EPS_END,
+                "eps_decay": EPS_DECAY,
+                "gamma": GAMMA,
+                "batch_size": BATCH_SIZE,
+                "tau": TAU,
+                "action_weights": ACTION_WEIGHTS,
+            }
+        )
     )
 
 
