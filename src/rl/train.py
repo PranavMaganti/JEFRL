@@ -9,7 +9,6 @@ from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 import torch
-from torch import nn
 from torch import optim
 import torch.nn.functional as F
 from transformers import RobertaModel
@@ -25,6 +24,7 @@ EPS_DECAY = 20000  # Controls the rate of exponential decay of epsilon, higher m
 BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
 GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
+GRAD_ACCUMULATION_STEPS = 2  # Number of steps to take before backpropagating the loss
 
 # Weights for each action in epsilon-greedy policy to reduce probability of
 # ending the episode early
@@ -96,6 +96,7 @@ def optimise_model(
     optimizer: optim.Optimizer,
     memory: ReplayMemory,
     device: torch.device,
+    step: int,
     batch_size: int = BATCH_SIZE,
     gamma: float = GAMMA,
 ) -> float:
@@ -114,8 +115,8 @@ def optimise_model(
     )
 
     states_batch = get_state_embedding(batch.states, ast_net, ast_tokenizer, device)
-    action_batch = torch.tensor(batch.actions).view(-1, 1).to(device)
-    reward_batch = torch.tensor(batch.rewards).to(device)
+    action_batch = torch.tensor(batch.actions, device = device).view(-1, 1)
+    reward_batch = torch.tensor(batch.rewards, device = device)
 
     current_state_values = policy_net(states_batch).gather(1, action_batch).squeeze(1)
     next_state_values = torch.zeros(batch_size, device=device)
@@ -135,6 +136,15 @@ def optimise_model(
             .squeeze(1)
         )
 
+    # next_state_values = torch.zeros(batch_size, device=device)
+    # with torch.no_grad():
+    #     non_final_next_states = [s for s in batch.next_states if s is not None]
+    #     non_final_next_states = get_state_embedding(
+    #         non_final_next_states, ast_net, ast_tokenizer, device
+    #     )
+
+    #     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+
     del states_batch
     del action_batch
     del non_final_next_states
@@ -149,12 +159,14 @@ def optimise_model(
     logging.info(f"Loss: {loss.item()}")
 
     # Optimize the model
-    optimizer.zero_grad()
     loss.backward()
 
     # In-place gradient clipping
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 3)  # type: ignore
-    optimizer.step()
+
+    if step % GRAD_ACCUMULATION_STEPS == 0:
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
     loss_value = loss.item()
 

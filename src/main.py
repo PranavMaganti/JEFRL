@@ -14,7 +14,7 @@ from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import ACTION_WEIGHTS
+from rl.train import ACTION_WEIGHTS, GRAD_ACCUMULATION_STEPS
 from rl.train import BATCH_SIZE
 from rl.train import EPS_DECAY
 from rl.train import EPS_END
@@ -152,6 +152,7 @@ with open(data_save_folder / "hyperparameters.json", "w") as f:
                 "batch_size": BATCH_SIZE,
                 "tau": TAU,
                 "action_weights": ACTION_WEIGHTS,
+                "grad_accumulation_steps": GRAD_ACCUMULATION_STEPS,
             }
         )
     )
@@ -205,7 +206,8 @@ try:
                 tokenizer,
                 optimizer,
                 memory,
-                device=device,
+                device,
+                total_steps
             )
             soft_update_params(policy_net, target_net)
 
