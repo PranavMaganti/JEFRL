@@ -19,10 +19,13 @@ def node_to_frags(
     frag_info_seq: list[tuple[int, str]],
     node_types: set[str],
     stack: Optional[list[tuple[int, str]]] = None,
+    max_len: Optional[int] = None,
 ):
     """
     Converts a js_ast Node into a list of fragments of height 1
     """
+    if max_len is not None and len(frag_seq) >= max_len:
+        return
 
     if stack is None:
         stack = [(-1, node.type)]
@@ -50,7 +53,7 @@ def node_to_frags(
                 frag[key] = val.to_dict()
             else:
                 frag[key] = {"type": val.type}
-                node_to_frags(val, frag_seq, frag_info_seq, node_types, stack)
+                node_to_frags(val, frag_seq, frag_info_seq, node_types, stack, max_len)
 
         # If it has multiple children
         elif isinstance(val, list):
@@ -61,7 +64,9 @@ def node_to_frags(
                         frag[key].append(child.to_dict())
                     else:
                         frag[key].append({"type": child.type})
-                        node_to_frags(child, frag_seq, frag_info_seq, node_types, stack)
+                        node_to_frags(
+                            child, frag_seq, frag_info_seq, node_types, stack, max_len
+                        )
                 else:
                     frag[key].append(child)
 

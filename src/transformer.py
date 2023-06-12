@@ -1,24 +1,23 @@
-from pathlib import Path
+from datetime import datetime
 import pickle
-from typing import Any
 
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.utils.data import random_split
-import tqdm
 from transformers import get_linear_schedule_with_warmup
-from transformers import RobertaConfig
+from transformers import TrainingArguments
 from transformers import RobertaForMaskedLM
+from transformers import RobertaConfig
+from transformers import Trainer
+import torch.nn.functional as F
 
 
+print("Loading data...")
 with open("ASTBERTa/vocab_data.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
 with open("ASTBERTa/data.pkl", "rb") as f:
     data = pickle.load(f)
-
 
 PAD_TOKEN = "<pad>"
 CLS_TOKEN = "<s>"
@@ -32,7 +31,7 @@ token_to_id = vocab_data["token_to_id"]
 vocab = vocab_data["vocab"]
 
 
-class FragDataset(Dataset[list[int]]):
+class ASTFragDataset(Dataset[list[int]]):
     def __init__(self, data: list[list[int]]):
         self.data = data
 
@@ -43,9 +42,12 @@ class FragDataset(Dataset[list[int]]):
         return self.data[index]
 
 
+start = datetime.now()
+save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
+
 MAX_SEQ_LEN = 512
 MLM_PROB = 0.15
-MODEL_SAVE_PATH = "ASTBERTa/models/sub-sequence/"
+MODEL_SAVE_PATH = f"ASTBERTa/models/{save_folder_name}"
 
 
 def seq_data_collator(batch: list[list[int]]) -> dict[str, torch.Tensor]:
@@ -102,79 +104,16 @@ def seq_data_collator(batch: list[list[int]]) -> dict[str, torch.Tensor]:
     }
 
 
-def evaluate_batch(model: RobertaForMaskedLM, batch: dict[str, Any]) -> torch.Tensor:
-    criterion = nn.CrossEntropyLoss()
+class ASTBERTaTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs["labels"]
 
-    input_ids = batch["input_ids"].to(device)
-    labels = batch["labels"].to(device)
-    attention_mask = batch["attention_mask"].to(device)
+        # forward pass
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
 
-    out = model(input_ids, attention_mask=attention_mask).logits
-    return criterion(out.view(-1, vocab_size), labels.view(-1))
-
-
-def evaluate(model: RobertaForMaskedLM, val_loader: DataLoader[list[int]]):
-    model.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for batch in tqdm.tqdm(val_loader):
-            loss = evaluate_batch(model, batch)
-            total_loss += loss.item()
-
-    return total_loss / len(val_loader)
-
-
-def train(
-    model: RobertaForMaskedLM,
-    train_loader: DataLoader[list[int]],
-    val_loader: DataLoader[list[int]],
-    optim: torch.optim.Optimizer,
-    lr_scheduler: torch.optim.lr_scheduler.LambdaLR,
-    model_save_path: Path = Path(MODEL_SAVE_PATH),
-    epochs: int = 8,
-):
-    steps = 0
-
-    train_losses = []
-    val_losses = []
-
-    for epoch in (pbar := tqdm.trange(epochs)):
-        model.train()
-        epoch_loss = 0
-        per_batch_loss = []
-        for _, batch in (
-            ibar := tqdm.tqdm(
-                enumerate(train_loader), leave=True, total=len(train_loader)
-            )
-        ):
-            loss = evaluate_batch(model, batch)
-            loss.backward()
-            lr_scheduler.step()
-            optim.step()
-            optim.zero_grad()
-
-            steps += 1
-            epoch_loss += loss.item()
-            per_batch_loss.append(loss.item())
-            # print(f"Epoch: {epoch}, Batch: {i}, Loss: {loss.item()}")
-            ibar.set_postfix({"loss": loss.item()})
-
-            if steps % 500 == 0:
-                torch.save(model, model_save_path / f"model_{steps}.pt")
-
-        val_loss = evaluate(model, val_loader)
-        pbar.set_postfix(
-            {"val_loss": val_loss, "train_loss": epoch_loss / len(train_loader)}
-        )
-        print(
-            f"Epoch: {epoch}, Val Loss: {val_loss}, Train Loss: {epoch_loss / len(train_loader)}"
-        )
-
-        train_losses.append(per_batch_loss)
-        val_losses.append(val_loss)
-
-        pickle.dump(train_losses, open(model_save_path / "train_losses.pkl", "wb"))
-        pickle.dump(val_losses, open(model_save_path / "val_losses.pkl", "wb"))
+        loss = F.cross_entropy(logits.view(-1, vocab_size), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -187,20 +126,11 @@ num_hidden_layers = 6
 num_attention_heads = 12
 dropout = 0.1
 
-batch_size = 64
+batch_size = 32
 
-dataset = FragDataset(data)
+dataset = ASTFragDataset(data)
 train_split, val_split, test_split = random_split(dataset, [0.8, 0.1, 0.1])
 
-train_loader = DataLoader(
-    train_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
-)
-val_loader = DataLoader(
-    val_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
-)
-test_loader = DataLoader(
-    test_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
-)
 config = RobertaConfig(
     vocab_size=vocab_size,
     hidden_size=hidden_size,
@@ -210,8 +140,7 @@ config = RobertaConfig(
     hidden_dropout_prob=dropout,
     max_position_embeddings=MAX_SEQ_LEN + 2,
 )
-model = RobertaForMaskedLM(config).to(device)
-model = torch.nn.DataParallel(model, device_ids=[0, 1])
+model = RobertaForMaskedLM(config)
 
 optim = torch.optim.AdamW(
     model.parameters(),
@@ -224,9 +153,32 @@ lr_scheduler = get_linear_schedule_with_warmup(
     optimizer=optim, num_warmup_steps=2400, num_training_steps=50000
 )
 
+trainer = ASTBERTaTrainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir=MODEL_SAVE_PATH,
+        overwrite_output_dir=True,
+        num_train_epochs=100,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        warmup_steps=2400,
+        weight_decay=0.01,
+        logging_dir=MODEL_SAVE_PATH,
+        logging_steps=100,
+        save_steps=500,
+        save_total_limit=2,
+    ),
+    data_collator=seq_data_collator,
+    train_dataset=train_split,
+    eval_dataset=val_split,
+    optimizers=(optim, lr_scheduler),
+)
+
 print(
     f"The model has {sum(p.numel() for p in model.parameters() if p.requires_grad):,} trainable parameters"
 )
 print(model)
 
-train(model, train_loader, val_loader, optim, lr_scheduler, epochs=100)
+# train(model, train_loader, val_loader, optim, lr_scheduler, epochs=100)
+
+trainer.train()

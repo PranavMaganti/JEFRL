@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Iterable
 
 from js_ast.fragmentise import hash_frag
@@ -14,17 +15,24 @@ UNK_TOKEN = "<unk>"
 
 
 class ASTTokenizer:
-    def __init__(self, vocab: set[str], token_to_id: dict[str, int], max_len: int):
+    def __init__(
+        self,
+        vocab: set[str],
+        token_to_id: dict[str, int],
+        max_len: int,
+        device: torch.device,
+    ):
         self.vocab = vocab
         self.token_to_id = token_to_id
         self.max_len = max_len
+        self.device = device
 
     def tokenize(self, ast: Node) -> torch.Tensor:
         frag_seq: list[dict[str, Any]] = []
         frag_info_seq = []
         node_types: set[str] = set()
 
-        node_to_frags(ast, frag_seq, frag_info_seq, node_types)
+        node_to_frags(ast, frag_seq, frag_info_seq, node_types, max_len=self.max_len)
 
         frag_id_seq: list[int] = []
         frag_id_seq.append(self.token_to_id[CLS_TOKEN])
@@ -50,14 +58,12 @@ class ASTTokenizer:
 
         return torch.tensor(frag_id_seq, dtype=torch.long)
 
-    def process_batch(
-        self, batch: Iterable[torch.Tensor], device: torch.device
-    ) -> dict[str, torch.Tensor]:
-        inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True)
-        attention_mask = torch.ones_like(inputs, device=device)
+    def pad_batch(self, batch: Iterable[torch.Tensor]) -> dict[str, torch.Tensor]:
+        inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True).to(self.device)
+        attention_mask = torch.ones_like(inputs, device=self.device)
         attention_mask[inputs == self.token_to_id[PAD_TOKEN]] = 0
 
         return {
-            "input_ids": inputs.to(device),
+            "input_ids": inputs,
             "attention_mask": attention_mask,
         }

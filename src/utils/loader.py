@@ -129,3 +129,21 @@ def get_subtrees(states: list[ProgramState]) -> dict[str, list[Node]]:
                 subtrees[node.type].append(node)
 
     return subtrees
+
+
+def load_program_states(folder: Path) -> tuple[list[ProgramState], Coverage]:
+    programs = []
+    total_coverage = Coverage()
+
+    files = list(folder.rglob("*.ps"))
+    for file in tqdm.tqdm(files, desc="Loading resume program states"):
+        with open(file, "rb") as f:
+            program = pickle.load(f)
+
+        if isinstance(program, ProgramState):
+            programs.append(program)
+            total_coverage |= program.exec_data.coverage
+        else:
+            print("Failed to load program state")
+
+    return programs, total_coverage

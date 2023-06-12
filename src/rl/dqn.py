@@ -10,20 +10,20 @@ import torch.nn.functional as F
 Transition = NamedTuple(
     "Transition",
     [
-        ("state", tuple[torch.Tensor, torch.Tensor]),
-        ("action", np.int64),
-        ("next_state", Optional[tuple[torch.Tensor, torch.Tensor]]),
-        ("reward", float),
+        ("state", torch.Tensor),
+        ("action", torch.Tensor),
+        ("next_state", Optional[torch.Tensor]),
+        ("reward", torch.Tensor),
     ],
 )
 
 BatchTransition = NamedTuple(
     "BatchTransition",
     [
-        ("states", tuple[tuple[torch.Tensor, torch.Tensor]]),
-        ("actions", tuple[np.int64]),
-        ("next_states", tuple[Optional[tuple[torch.Tensor, torch.Tensor]]]),
-        ("rewards", tuple[float]),
+        ("states", tuple[torch.Tensor]),
+        ("actions", tuple[torch.Tensor]),
+        ("next_states", tuple[Optional[torch.Tensor]]),
+        ("rewards", tuple[torch.Tensor]),
     ],
 )
 
@@ -34,10 +34,10 @@ class ReplayMemory:
 
     def push(
         self,
-        state: tuple[torch.Tensor, torch.Tensor],
-        action: np.int64,
-        next_state: Optional[tuple[torch.Tensor, torch.Tensor]],
-        reward: float,
+        state: torch.Tensor,
+        action: torch.Tensor,
+        next_state: Optional[torch.Tensor],
+        reward: torch.Tensor,
     ):
         """Save a transition"""
         self.memory.append(Transition(state, action, next_state, reward))

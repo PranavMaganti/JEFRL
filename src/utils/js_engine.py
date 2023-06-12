@@ -29,6 +29,7 @@ class JSError(str, Enum):
     SyntaxError = "SyntaxError"
     TypeError = "TypeError"
     RangeError = "RangeError"
+    URIError = "URIError"
     Other = "Other"
     TimeoutError = "TimeoutError"
     NoError = "NoError"
@@ -183,6 +184,8 @@ class Engine(ABC):
                 error = JSError.TypeError
             elif "RangeError" in out:
                 error = JSError.RangeError
+            elif "URIError" in out:
+                error = JSError.URIError
             elif res.returncode != 0:
                 error = JSError.Other
         except subprocess.TimeoutExpired:

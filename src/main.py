@@ -1,40 +1,36 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
-from datetime import datetime
 import json
 import logging
 import os
-from pathlib import Path
 import pickle
+import random
 import sys
 import traceback
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
-from rl.dqn import DQN
-from rl.dqn import ReplayMemory
+import torch
+from optimum.bettertransformer import BetterTransformer
+from torch import optim
+from transformers import RobertaConfig, RobertaModel
+
+from rl.dqn import DQN, ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
-from rl.train import ACTION_WEIGHTS
-from rl.train import BATCH_SIZE
-from rl.train import EPS_DECAY
-from rl.train import EPS_END
-from rl.train import EPS_START
-from rl.train import epsilon_greedy
-from rl.train import GAMMA
-from rl.train import GRAD_ACCUMULATION_STEPS
-from rl.train import LR
-from rl.train import NUM_TRAINING_STEPS
-from rl.train import optimise_model
-from rl.train import REPLAY_MEMORY_SIZE
-from rl.train import soft_update_params
-from rl.train import TAU
-import torch
-from torch import optim
-from transformers import RobertaConfig
-from transformers import RobertaModel
-
+# from rl.train import GRAD_ACCUMULATION_STEPS
+from rl.train import (ACTION_WEIGHTS, BATCH_SIZE, EPS_DECAY, EPS_END,
+                      EPS_START, GAMMA, LR, NUM_TRAINING_STEPS,
+                      REPLAY_MEMORY_SIZE, TAU, epsilon_greedy, optimise_model,
+                      soft_update_params)
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
+seed = 20
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
 
 
 INTERESTING_FOLDER = Path("corpus/interesting")
@@ -85,7 +81,7 @@ config = RobertaConfig(
 
 
 # Load the ASTBERTa model
-tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN)
+tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
 pretrained_model = torch.load("ASTBERTa/models/final/model_28000.pt")
 
 if isinstance(pretrained_model, torch.nn.DataParallel):
@@ -96,12 +92,16 @@ ast_net = RobertaModel.from_pretrained(
     state_dict=pretrained_model.state_dict(),
     config=config,
 ).to(device)
+ast_net = BetterTransformer.transform(ast_net)
 # ast_net = torch.nn.DataParallel(ast_net, device_ids=[0, 1])
 # ast_net = torch.load("ASTBERTa/models/final/model_28000.pt").to(device)
 
 # Check types of the loaded model
 assert isinstance(config, RobertaConfig)
 # assert isinstance(ast_net, RobertaModel)
+
+for param in ast_net.parameters():
+    param.requires_grad = False
 
 
 # Initialise policy and target networks
@@ -116,8 +116,11 @@ policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
+for param in target_net.parameters():
+    param.requires_grad = False
+
 optimizer = optim.AdamW(
-    [*ast_net.parameters(), *policy_net.parameters()],
+    [*policy_net.parameters()],
     lr=LR,
     amsgrad=True,
 )
@@ -153,7 +156,8 @@ with open(data_save_folder / "hyperparameters.json", "w") as f:
                 "batch_size": BATCH_SIZE,
                 "tau": TAU,
                 "action_weights": ACTION_WEIGHTS,
-                "grad_accumulation_steps": GRAD_ACCUMULATION_STEPS,
+                # "grad_accumulation_steps": GRAD_ACCUMULATION_STEPS,
+                "seed": seed,
             }
         )
     )
@@ -166,6 +170,7 @@ env = FuzzingEnv(
     subtrees,
     engine,
     total_coverage,
+    ast_net,
     tokenizer,
     INTERESTING_FOLDER / save_folder_name,
 )
@@ -189,28 +194,40 @@ try:
         episode_action: list[tuple[int, str]] = []
 
         while not done and not truncated:
-            action = epsilon_greedy(
-                policy_net, state, ast_net, tokenizer, env, total_steps, device
-            )
-            episode_action.append((action, env._state.target_node.type))
+            ep_start = datetime.now()
+            action = epsilon_greedy(policy_net, state, env, total_steps, device)
+            episode_action.append((action.item(), env._state.target_node.type))
 
-            next_state, reward, truncated, done, info = env.step(action)
+            start = datetime.now()
+            next_state, reward, truncated, done, info = env.step(action.item())
+            end = datetime.now()
+            print(f"Step took {(end - start).total_seconds()} seconds")
+
             episode_reward.append(reward)
-
             total_steps += 1
 
-            memory.push(state, action, next_state, reward)
+            memory.push(
+                state,
+                action,
+                next_state,
+                torch.tensor([reward], device=device),
+            )
+
+            start = datetime.now()
             loss = optimise_model(
                 policy_net,
                 target_net,
-                ast_net,
-                tokenizer,
                 optimizer,
                 memory,
                 device,
-                total_steps,
             )
+            end = datetime.now()
+            print(f"Optimisation took {(end - start).total_seconds()} seconds")
+
+            start = datetime.now()
             soft_update_params(policy_net, target_net)
+            end = datetime.now()
+            print(f"Soft update took {(end - start).total_seconds()} seconds")
 
             losses.append(loss)
 
@@ -221,9 +238,12 @@ try:
                 ] = env.total_coverage.coverage()
 
             if total_steps % 1000 == 0:
-                torch.save(ast_net, data_save_folder / f"ast_net_{total_steps}.pt")
+                # torch.save(ast_net, data_save_folder / f"ast_net_{total_steps}.pt")
                 torch.save(
                     policy_net, data_save_folder / f"policy_net_{total_steps}.pt"
+                )
+                torch.save(
+                    target_net, data_save_folder / f"target_net_{total_steps}.pt"
                 )
                 current_coverage = env.total_coverage.coverage()
                 total_executions = env.total_executions
@@ -244,6 +264,9 @@ try:
                         f,
                     )
 
+            ep_end = datetime.now()
+            print(f"Episode took {(ep_end - ep_start).total_seconds()} seconds")
+
         episode_coverage.append(env.total_coverage.coverage())
         episode_rewards.append(episode_reward)
         episode_actions.append(episode_action)
@@ -256,12 +279,12 @@ finally:
     end = datetime.now()
     episode_rewards_summed = [sum(episode) for episode in episode_rewards]
 
-    logging.info(f"Initial coverage: {initial_coverage}")
+    logging.info(f"Initial coverage: {initial_coverage:.5%}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - start}",
     )
     logging.info(
-        f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
+        f"Coverage increase: {(env.total_coverage.coverage() - initial_coverage):.5%}"
     )
     logging.info(f"Average reward: {np.mean(episode_rewards_summed):.2f}")
     logging.info(f"Total steps: {env.total_actions}")
