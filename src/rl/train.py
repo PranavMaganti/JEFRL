@@ -25,7 +25,7 @@ EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
 EPS_DECAY = 150000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 256  # Number of transitions sampled from the replay buffer
-GAMMA = 0.95  # Discount factor as mentioned in the previous section
+GAMMA = 0.90  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
 
 # Weights for each action in epsilon-greedy policy to reduce probability of

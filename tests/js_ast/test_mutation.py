@@ -19,8 +19,9 @@ class TestReplace:
         target = Identifier(name="x")
         target.parent = None
 
-        new_node = replace(subtrees, target)
+        new_node, changed = replace(subtrees, target, target.root())
 
+        assert not changed
         assert new_node == target
 
     def test_replace_no_subtrees(self):
@@ -33,8 +34,9 @@ class TestReplace:
             scope=Scope(scope_type=ScopeType.GLOBAL),
         )
 
-        new_node = replace(subtrees, target)
+        new_node, changed = replace(subtrees, target, target.root())
 
+        assert not changed
         assert new_node == target
 
     def test_replace_no_match(self):
@@ -48,7 +50,7 @@ class TestReplace:
         )
 
         with pytest.raises(ValueError):
-            replace(subtrees, target)
+            replace(subtrees, target, target.root())
 
     def test_replace_list(self):
         subtrees = {
@@ -79,8 +81,9 @@ class TestReplace:
         )
         target.parent = parent
 
-        new_node = replace(subtrees, target)
+        new_node, changed = replace(subtrees, target, target.root())
 
+        assert changed
         assert new_node.parent == parent
         assert new_node in parent.body
 
@@ -124,8 +127,9 @@ class TestReplace:
         parent.parent = root
         target.parent = parent
 
-        new_node = replace(subtrees, target)
+        new_node, changed = replace(subtrees, target, target.root())
 
+        assert changed
         assert new_node.parent == parent
         assert new_node == parent.left
 
@@ -144,8 +148,9 @@ class TestAdd:
         target = Identifier(name="y")
         target.parent = None
 
-        new_node = add(subtrees, target)
+        new_node, changed = add(subtrees, target, target.root())
 
+        assert not changed
         assert new_node == target
 
     def test_no_subtree(self):
@@ -156,8 +161,9 @@ class TestAdd:
             operator="+",
             right=Literal(value=1, raw="1"),
         )
-        new_node = add(subtrees, target)
+        new_node, changed = add(subtrees, target, target.root())
 
+        assert not changed
         assert new_node == target
 
     def test_add(self):
@@ -184,8 +190,9 @@ class TestAdd:
                 ),
             ]
         )
-        new_node = add(subtrees, target)
+        new_node, changed = add(subtrees, target, target.root())
 
+        assert changed
         assert new_node in target.body
         assert new_node.parent == target
 
@@ -207,8 +214,9 @@ class TestAdd:
             right=Literal(value=1, raw="1"),
         )
 
-        new_node = add(subtrees, target)
+        new_node, changed = add(subtrees, target, target.root())
 
+        assert not changed
         assert new_node == target
 
 
@@ -217,8 +225,9 @@ class TestRemove:
         target = Identifier(name="x")
         target.parent = None
 
-        new_node = remove(target)
+        new_node, changed = remove({}, target, target.root())
 
+        assert not changed
         assert new_node == target
 
     def test_no_match(self):
@@ -230,7 +239,7 @@ class TestRemove:
         )
 
         with pytest.raises(ValueError):
-            remove(target)
+            remove({}, target, target.root())
 
     def test_remove_from_list(self):
         target = ExpressionStatement(
@@ -256,8 +265,9 @@ class TestRemove:
         )
         target.parent = parent
 
-        new_node = remove(target)
+        new_node, changed = remove({}, target, target.root())
 
+        assert changed
         assert new_node == parent
         assert len(new_node.body) == 1
         assert new_node.body[0].type == "VariableDeclaration"
@@ -270,6 +280,7 @@ class TestRemove:
             right=Literal(value=2, raw="2"),
         )
 
-        new_node = remove(target)
+        new_node, changed = remove({}, target, target.root())
 
+        assert not changed
         assert new_node == target

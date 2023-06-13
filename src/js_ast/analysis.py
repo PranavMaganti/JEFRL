@@ -78,7 +78,9 @@ def scope_analysis(node: Node, scope: Optional[Scope] = None):
             new_scope = Scope(parent=scope, scope_type=ScopeType.BLOCK)
 
         for item in node.body:
-            if isinstance(item, FunctionDeclaration):
+            if isinstance(
+                item, (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression)
+            ):
                 for param in item.params:
                     if isinstance(param, Identifier):
                         new_scope.variables.add(param.name)
@@ -153,16 +155,29 @@ def fix_node_references(
         if isinstance(node.parent, MemberExpression) and node.parent.object != node:
             return
 
+        if isinstance(
+            node.parent,
+            (FunctionDeclaration, FunctionExpression, ArrowFunctionExpression),
+        ):
+            if node in node.parent.params:
+                return
+
         scope = node.parent.scope
 
         if not scope:
             print(node.parent)
+            raise Exception("Scope not found")
 
         if scope.available_variables() and node.name not in scope.available_variables():
             node.name = random.choice(list(scope.available_variables()))
 
     elif isinstance(node, CallExpression) and isinstance(node.callee, Identifier):
         scope = node.scope
+
+        if not scope:
+            print(node.parent)
+            raise Exception("Scope not found")
+
         if (
             scope.available_functions()
             and node.callee.name not in scope.available_functions()
@@ -190,7 +205,7 @@ def fix_node_references(
 
 # Gets random literal or identifier
 def random_value(scope: Scope, parent: Node, subtrees: dict[str, list[Node]]):
-    if random.random() < 0.25:
+    if "Literal" in subtrees and random.random() < 0.25:
         new_node = random.choice(subtrees["Literal"])
         new_node.parent = parent
 

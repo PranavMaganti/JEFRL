@@ -51,9 +51,6 @@ class ProgramState:
 
     def move_down(self) -> bool:
         self.action_history.append(FuzzingAction.MOVE_DOWN)
-        if self.target_node.parent is None:
-            return False
-
         children = self.target_node.children()
         if not children:
             return False

@@ -283,7 +283,7 @@ class TestFixNodeReferences:
         )
         scope = Scope(functions={"bar": 1})
         node.scope = scope
-        fix_node_references(node)
+        fix_node_references(node, {})
         assert node.callee.name in scope.available_functions()
         assert len(node.arguments) == 1
         for child in node.traverse():
@@ -309,7 +309,7 @@ class TestFixNodeReferences:
         node.right.arguments[0].scope = scope
         node.right.callee.scope = scope
 
-        fix_node_references(node)
+        fix_node_references(node, {})
         assert node.left.name in scope.available_variables()
         assert node.right.callee.name in scope.available_functions()
         assert (

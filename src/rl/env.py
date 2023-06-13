@@ -68,6 +68,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
         self.total_executions = 0
         self.total_actions = 0
+        self.failed_actions = []
 
         self.tokenizer = tokenizer
 
@@ -198,6 +199,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
                 raise ValueError(f"Invalid action: {action}")
 
         if not changed:
+            self.failed_actions.append((action, self._state.target_node.type))
             # Negative reward for action which does not change the state
             return (
                 self._get_obs(),
@@ -255,6 +257,9 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
                 moved = self._state.move_right()
             case _:
                 raise ValueError(f"Invalid action: {action}")
+
+        if not moved:
+            self.failed_actions.append((action, self._state.target_node.type))
 
         return (
             self._get_obs(),

@@ -11,9 +11,8 @@ class TestMakeFrags:
         node = Node.from_dict(node.toDict())
 
         frag_seq: list[dict[str, Any]] = []
-        frag_info_seq: list[tuple[int, str]] = []
         node_types: set[str] = set()
-        node_to_frags(node, frag_seq, frag_info_seq, node_types)
+        node_to_frags(node, frag_seq, node_types)
 
         assert len(frag_seq) == 3
         print(frag_seq)
@@ -35,19 +34,13 @@ class TestMakeFrags:
             "bigint": None,
         }
 
-        assert len(frag_info_seq) == 3
-        assert frag_info_seq[0] == (-1, "Program")
-        assert frag_info_seq[1] == (0, "ExpressionStatement")
-        assert frag_info_seq[2] == (1, "Literal")
-
     def test_multiple_child_node(self):
         node = esprima.parseScript("x + y")
         node = Node.from_dict(node.toDict())
 
         frag_seq: list[dict[str, Any]] = []
-        frag_info_seq: list[tuple[int, str]] = []
         node_types: set[str] = set()
-        node_to_frags(node, frag_seq, frag_info_seq, node_types)
+        node_to_frags(node, frag_seq, node_types)
 
         assert len(frag_seq) == 5
         assert frag_seq[0] == {
@@ -69,24 +62,15 @@ class TestMakeFrags:
         assert frag_seq[3] == {"type": "Identifier", "name": "x"}
         assert frag_seq[4] == {"type": "Identifier", "name": "y"}
 
-        assert len(frag_info_seq) == 5
-        assert frag_info_seq[0] == (-1, "Program")
-        assert frag_info_seq[1] == (0, "ExpressionStatement")
-        assert frag_info_seq[2] == (1, "BinaryExpression")
-        assert frag_info_seq[3] == (2, "Identifier")
-        assert frag_info_seq[4] == (2, "Identifier")
-
     def test_nested_node(self):
         node = esprima.parseScript("if (x) { y } else { z }")
         node = Node.from_dict(node.toDict())
 
         frag_seq: list[dict[str, Any]] = []
-        frag_info_seq: list[tuple[int, str]] = []
         node_types: set[str] = set()
         node_to_frags(
             node,
             frag_seq,
-            frag_info_seq,
             node_types,
         )
 
@@ -143,14 +127,3 @@ class TestMakeFrags:
             "type": "Identifier",
             "name": "z",
         }
-
-        assert len(frag_info_seq) == 9
-        assert frag_info_seq[0] == (-1, "Program")
-        assert frag_info_seq[1] == (0, "IfStatement")
-        assert frag_info_seq[2] == (1, "Identifier")
-        assert frag_info_seq[3] == (1, "BlockStatement")
-        assert frag_info_seq[4] == (3, "ExpressionStatement")
-        assert frag_info_seq[5] == (4, "Identifier")
-        assert frag_info_seq[6] == (1, "BlockStatement")
-        assert frag_info_seq[7] == (6, "ExpressionStatement")
-        assert frag_info_seq[8] == (7, "Identifier")

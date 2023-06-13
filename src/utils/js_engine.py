@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 import ctypes
 from dataclasses import dataclass
 from enum import Enum
+import logging
 import math
 from multiprocessing import shared_memory
 import os
@@ -19,6 +20,8 @@ from numpy.typing import NDArray
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
 SHM_ID = "js_rl"
+
+TIMEOUT = 0.5
 
 ENGINES_DIR = Path("engines")
 CORPUS_DIR = Path("corpus")
@@ -165,7 +168,7 @@ class Engine(ABC):
                 [self.executable, *self.args, file],
                 capture_output=True,
                 check=False,
-                timeout=5,
+                timeout=TIMEOUT,
             )
             try:
                 out = res.stdout.decode("utf-8")
@@ -190,6 +193,7 @@ class Engine(ABC):
                 error = JSError.Other
         except subprocess.TimeoutExpired:
             error = JSError.TimeoutError
+            logging.info("Timeout")
 
         data = ShmData.from_buffer(shm.buf)
 

@@ -145,8 +145,8 @@ optimizer = optim.AdamW(
 memory = ReplayMemory(REPLAY_MEMORY_SIZE)
 
 # Setup environment
-start = datetime.now()
-save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
+fuzz_start = datetime.now()
+save_folder_name = fuzz_start.strftime("%Y-%m-%dT%H:%M:.%f")
 data_save_folder = Path("data/") / save_folder_name
 os.makedirs(data_save_folder, exist_ok=True)
 
@@ -291,7 +291,8 @@ try:
                             "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
-                            "running_time": datetime.now() - start,
+                            "failed_actions": env.failed_actions,
+                            "running_time": datetime.now() - fuzz_start,
                             "losses": losses,
                         },
                         f,
@@ -314,7 +315,7 @@ finally:
 
     logging.info(f"Initial coverage: {initial_coverage:.5%}")
     logging.info(
-        f"Finished with final coverage: {env.total_coverage} in {end - start}",
+        f"Finished with final coverage: {env.total_coverage} in {end - fuzz_start}",
     )
     logging.info(
         f"Coverage increase: {(env.total_coverage.coverage() - initial_coverage):.5%}"
