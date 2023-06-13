@@ -17,13 +17,13 @@ import torch.nn.functional as F
 from transformers import RobertaModel
 
 
-NUM_TRAINING_STEPS = 80000  # Number of episodes to train the agent for
+NUM_TRAINING_STEPS = 1000000  # Number of episodes to train the agent for
 LR = 5e-4  # Learning rate of the AdamW optimizer
-REPLAY_MEMORY_SIZE = 8000  # Size of the replay buffer
+REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 13000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+EPS_DECAY = 150000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 256  # Number of transitions sampled from the replay buffer
 GAMMA = 0.95  # Discount factor as mentioned in the previous section
 TAU = 0.005  # Update rate of the target network
@@ -105,7 +105,11 @@ def optimise_model(
     state_action_values = policy_net(states_batch).gather(1, action_batch)
     next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
-        next_state_values[non_final_mask] = target_net(next_states_batch).max(1)[0]
+        next_state_values[non_final_mask] = (
+            target_net(next_states_batch)
+            .gather(1, policy_net(next_states_batch).argmax(1, keepdim=True))
+            .squeeze()
+        )
 
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * gamma) + reward_batch
@@ -119,7 +123,7 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 1)  # type: ignore
     optimizer.step()
 
     return loss.item()

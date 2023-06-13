@@ -29,10 +29,9 @@ class ASTTokenizer:
 
     def tokenize(self, ast: Node) -> torch.Tensor:
         frag_seq: list[dict[str, Any]] = []
-        frag_info_seq = []
         node_types: set[str] = set()
 
-        node_to_frags(ast, frag_seq, frag_info_seq, node_types, max_len=self.max_len)
+        node_to_frags(ast, frag_seq, node_types, max_len=self.max_len)
 
         frag_id_seq: list[int] = []
         frag_id_seq.append(self.token_to_id[CLS_TOKEN])
@@ -50,16 +49,15 @@ class ASTTokenizer:
                     print(f"UNK_TOKEN: {frag_hash}")
                     frag_id_seq.append(self.token_to_id[UNK_TOKEN])
 
-            if len(frag_id_seq) >= self.max_len:
-                break
-
         if len(frag_id_seq) < self.max_len:
             frag_id_seq.append(self.token_to_id[SEP_TOKEN])
 
         return torch.tensor(frag_id_seq, dtype=torch.long)
 
     def pad_batch(self, batch: Iterable[torch.Tensor]) -> dict[str, torch.Tensor]:
-        inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True).to(self.device)
+        inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True).to(
+            self.device
+        )
         attention_mask = torch.ones_like(inputs, device=self.device)
         attention_mask[inputs == self.token_to_id[PAD_TOKEN]] = 0
 

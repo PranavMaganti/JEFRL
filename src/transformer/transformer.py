@@ -2,14 +2,14 @@ from datetime import datetime
 import pickle
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 from torch.utils.data import random_split
 from transformers import get_linear_schedule_with_warmup
-from transformers import TrainingArguments
-from transformers import RobertaForMaskedLM
 from transformers import RobertaConfig
+from transformers import RobertaForMaskedLM
 from transformers import Trainer
-import torch.nn.functional as F
+from transformers import TrainingArguments
 
 
 print("Loading data...")

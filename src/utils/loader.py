@@ -18,8 +18,8 @@ from utils.js_engine import ExecutionData
 from utils.js_engine import JSError
 
 
-def load_raw_corpus(corpus_path: Path) -> dict[Path, Node]:
-    nodes: dict[Path, Node] = {}
+def load_raw_corpus(corpus_path: Path) -> list[Node]:
+    asts: list[Node] = []
 
     files = list(corpus_path.rglob("*.js"))
     for file in tqdm.tqdm(files):
@@ -33,9 +33,9 @@ def load_raw_corpus(corpus_path: Path) -> dict[Path, Node]:
             logging.warning(f"Failed to parse {file} when converting to ast")
             continue
 
-        nodes[file] = ast
+        asts.append(ast)
 
-    return nodes
+    return asts
 
 
 # Loads corpus, skipping files that do not increase the coverage

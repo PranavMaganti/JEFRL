@@ -1,31 +1,44 @@
 # Initial coverage: 14.73665% Final coverage: 14.78238%
+from datetime import datetime
 import json
 import logging
 import os
+from pathlib import Path
 import pickle
 import random
 import sys
 import traceback
-from datetime import datetime
-from pathlib import Path
 
 import numpy as np
-import torch
 from optimum.bettertransformer import BetterTransformer
-from torch import optim
-from transformers import RobertaConfig, RobertaModel
-
-from rl.dqn import DQN, ReplayMemory
+from rl.dqn import DQN
+from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
+
 # from rl.train import GRAD_ACCUMULATION_STEPS
-from rl.train import (ACTION_WEIGHTS, BATCH_SIZE, EPS_DECAY, EPS_END,
-                      EPS_START, GAMMA, LR, NUM_TRAINING_STEPS,
-                      REPLAY_MEMORY_SIZE, TAU, epsilon_greedy, optimise_model,
-                      soft_update_params)
+from rl.train import ACTION_WEIGHTS
+from rl.train import BATCH_SIZE
+from rl.train import EPS_DECAY
+from rl.train import EPS_END
+from rl.train import EPS_START
+from rl.train import epsilon_greedy
+from rl.train import GAMMA
+from rl.train import LR
+from rl.train import NUM_TRAINING_STEPS
+from rl.train import optimise_model
+from rl.train import REPLAY_MEMORY_SIZE
+from rl.train import soft_update_params
+from rl.train import TAU
+import torch
+from torch import optim
+from transformers import RobertaConfig
+from transformers import RobertaModel
+
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
 
 seed = 20
 random.seed(seed)
@@ -35,6 +48,11 @@ torch.manual_seed(seed)
 
 INTERESTING_FOLDER = Path("corpus/interesting")
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
+
+seed = random.randint(0, 2**32 - 1)
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
 
 
 # System setup
@@ -82,7 +100,7 @@ config = RobertaConfig(
 
 # Load the ASTBERTa model
 tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
-pretrained_model = torch.load("ASTBERTa/models/final/model_28000.pt")
+pretrained_model = torch.load("ASTBERTa/models/final/model_27500.pt")
 
 if isinstance(pretrained_model, torch.nn.DataParallel):
     pretrained_model = pretrained_model.module
@@ -170,7 +188,6 @@ env = FuzzingEnv(
     subtrees,
     engine,
     total_coverage,
-    ast_net,
     tokenizer,
     INTERESTING_FOLDER / save_folder_name,
 )
@@ -186,30 +203,46 @@ episode_actions: list[list[tuple[int, str]]] = []
 
 losses: list[float] = []
 
+
+def get_state_embedding(
+    state: tuple[torch.Tensor, torch.Tensor],
+    ast_net: RobertaModel,
+    tokenizer: ASTTokenizer,
+) -> torch.Tensor:
+    batch = tokenizer.pad_batch(list(state))
+    state_embedding = ast_net(**batch).last_hidden_state.mean(1).view(1, -1)
+    return state_embedding
+
+
 try:
     while total_steps < NUM_TRAINING_STEPS:
         state, info = env.reset()
+        state_embedding = get_state_embedding(state, ast_net, tokenizer)
+
         done, truncated = False, False
         episode_reward: list[float] = []
         episode_action: list[tuple[int, str]] = []
 
         while not done and not truncated:
             ep_start = datetime.now()
-            action = epsilon_greedy(policy_net, state, env, total_steps, device)
+            action = epsilon_greedy(
+                policy_net, state_embedding, env, total_steps, device
+            )
             episode_action.append((action.item(), env._state.target_node.type))
 
             start = datetime.now()
             next_state, reward, truncated, done, info = env.step(action.item())
             end = datetime.now()
             print(f"Step took {(end - start).total_seconds()} seconds")
-
             episode_reward.append(reward)
             total_steps += 1
 
+            next_state_embedding = get_state_embedding(next_state, ast_net, tokenizer)
+
             memory.push(
-                state,
+                state_embedding,
                 action,
-                next_state,
+                next_state_embedding,
                 torch.tensor([reward], device=device),
             )
 

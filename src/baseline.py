@@ -1,22 +1,20 @@
 # Initial coverage: 14.7366%  Final coverage: 14.86%
+from datetime import datetime
 import logging
 import os
+from pathlib import Path
 import pickle
 import sys
 import traceback
-from datetime import datetime
-from itertools import count
-from pathlib import Path
 
 import numpy as np
-import torch
-from optimum.bettertransformer import BetterTransformer
-from transformers import RobertaConfig, RobertaModel
-
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
+import torch
+
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
+
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -45,40 +43,10 @@ os.makedirs(data_save_folder, exist_ok=True)
 
 INTERESTING_FOLDER = Path("corpus/interesting")
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
+MAX_STEPS = 3000
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-
-vocab_size = len(vocab)  # size of vocabulary
-intermediate_size = 3072  # embedding dimension
-hidden_size = 768
-
-num_hidden_layers = 6
-num_attention_heads = 12
-dropout = 0.1
-
-config = RobertaConfig(
-    vocab_size=vocab_size,
-    hidden_size=hidden_size,
-    num_hidden_layers=num_hidden_layers,
-    num_attention_heads=num_attention_heads,
-    intermediate_size=intermediate_size,
-    hidden_dropout_prob=dropout,
-    max_position_embeddings=MAX_FRAGMENT_SEQ_LEN + 2,
-)
-
 tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
-pretrained_model = torch.load("ASTBERTa/models/final/model_28000.pt")
-
-if isinstance(pretrained_model, torch.nn.DataParallel):
-    pretrained_model = pretrained_model.module
-
-ast_net = RobertaModel.from_pretrained(
-    pretrained_model_name_or_path=None,
-    state_dict=pretrained_model.state_dict(),
-    config=config,
-).to(device)
-ast_net = BetterTransformer.transform(ast_net)
 
 
 logging.info("Initialising environment")
@@ -88,7 +56,6 @@ env = FuzzingEnv(
     subtrees,
     engine,
     total_coverage,
-    ast_net,
     tokenizer,
     INTERESTING_FOLDER / save_folder_name,
 )
@@ -105,7 +72,7 @@ episode_coverage: list[float] = []
 episode_actions: list[list[tuple[int, str]]] = []
 
 try:
-    while True:
+    while total_steps < MAX_STEPS:
         state, info = env.reset()
         done, truncated = False, False
         episode_reward: list[float] = []
@@ -115,7 +82,11 @@ try:
             action = env.action_space.sample()
             episode_action.append((action, env._state.target_node.type))
 
+            start = datetime.now()
             next_state, reward, truncated, done, info = env.step(action)
+            end = datetime.now()
+            logging.info(f"Step time: {end - start}")
+
             episode_reward.append(reward)
 
             total_steps += 1

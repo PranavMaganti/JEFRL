@@ -134,8 +134,8 @@ def remove(
         elif val is target:
             return target, False
 
-    print(target)
-    print(target.parent)
+    # print(target)
+    # print(target.parent)
     raise ValueError("Could not find target in parent")
 
 
