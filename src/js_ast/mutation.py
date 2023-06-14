@@ -49,6 +49,7 @@ non_add_types = {
     "BreakStatement",
     "ContinueStatement",
     "YieldExpression",
+    "Super",
 }
 
 
@@ -67,9 +68,9 @@ def replace(
         new_node = copy.deepcopy(random.choice(subtrees[target.type]))
         new_node.parent = target.parent
 
-    # print(target)
-    # print(target.parent)
-    # print(new_node)
+    print(target)
+    print(target.parent)
+    print(new_node)
 
     # TODO: Tidy up this code by possibly adding field to parent property of node
     # which indicates which field in the parent the child belongs to
@@ -98,7 +99,7 @@ def replace(
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root, subtrees, new_node)
-    # print(target.parent)
+    print(target.parent)
 
     return new_node, True
 
@@ -109,8 +110,8 @@ def remove(
     if target.parent is None:
         return target, False
 
-    # print(target)
-    # print(target.parent)
+    print(target)
+    print(target.parent)
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
@@ -133,9 +134,7 @@ def remove(
                     return target.parent, True
         elif val is target:
             return target, False
-
-    # print(target)
-    # print(target.parent)
+        
     raise ValueError("Could not find target in parent")
 
 
@@ -144,19 +143,21 @@ def add(subtrees: dict[str, list[Node]], target: Node, root: Node) -> tuple[Node
         return target, False
 
     field, types = node_add_types[target.type]
-    for t in types:
-        types += t.__subclasses__()
 
-    types_name = [
+    sub_types = set(types)
+    for t in types:
+        sub_types.update(t.__subclasses__())
+
+    candidate_types = [
         t.__name__
-        for t in types
+        for t in sub_types
         if t.__name__ in subtrees and t.__name__ not in non_add_types
     ]
 
-    if len(types_name) == 0:
+    if len(candidate_types) == 0:
         return target, False
 
-    add_type = np.random.choice(types_name)
+    add_type = np.random.choice(candidate_types)
     new_node: Node = copy.deepcopy(random.choice(subtrees[add_type]))
 
     list_nodes = getattr(target, field)

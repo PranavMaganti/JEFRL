@@ -18,15 +18,17 @@ from transformers import RobertaModel
 
 
 NUM_TRAINING_STEPS = 1000000  # Number of episodes to train the agent for
-LR = 5e-4  # Learning rate of the AdamW optimizer
-REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
+LR = 1e-3  # Learning rate of the AdamW optimizer
+REPLAY_MEMORY_SIZE = 30000  # Size of the replay buffer
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 150000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+EPS_DECAY = 160000  # Controls the rate of exponential decay of epsilon, higher means a slower decay
 BATCH_SIZE = 256  # Number of transitions sampled from the replay buffer
-GAMMA = 0.90  # Discount factor as mentioned in the previous section
-TAU = 0.005  # Update rate of the target network
+GAMMA = 0.99  # Discount factor as mentioned in the previous section
+TAU = 1  # Update rate of the target network
+TARGET_UPDATE = 5000  # Number of steps after which the target network is updated
+GRADIENT_CLIP = 1  # Maximum value of the gradient during backpropagation
 
 # Weights for each action in epsilon-greedy policy to reduce probability of
 # ending the episode early
@@ -123,7 +125,7 @@ def optimise_model(
     loss.backward()
 
     # In-place gradient clipping
-    torch.nn.utils.clip_grad_value_(policy_net.parameters(), 1)  # type: ignore
+    torch.nn.utils.clip_grad_value_(policy_net.parameters(), GRADIENT_CLIP)  # type: ignore
     optimizer.step()
 
     return loss.item()

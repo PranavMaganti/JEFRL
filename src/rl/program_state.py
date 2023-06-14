@@ -44,7 +44,7 @@ class ProgramState:
             return False
 
         self.target_node = self.target_node.parent
-        if len(self.context_node) > 1 and self.target_node == self.context_node[-1]:
+        if len(self.context_node) > 1 and self.target_node is self.context_node[-1]:
             self.context_node.pop()
 
         return True
@@ -55,7 +55,7 @@ class ProgramState:
         if not children:
             return False
 
-        if self.target_node != self.context_node[-1] and is_context_node(
+        if self.target_node is not self.context_node[-1] and is_context_node(
             self.target_node
         ):
             self.context_node.append(self.target_node)
@@ -75,7 +75,7 @@ class ProgramState:
             return False
 
         for i, child in enumerate(parent_children):
-            if child == self.target_node:
+            if child is self.target_node:
                 self.target_node = parent_children[(i - 1) % len(parent_children)]
                 return True
 
@@ -91,7 +91,7 @@ class ProgramState:
             return False
 
         for i, child in enumerate(parent_children):
-            if child == self.target_node:
+            if child is self.target_node:
                 self.target_node = parent_children[(i + 1) % len(parent_children)]
                 return True
 

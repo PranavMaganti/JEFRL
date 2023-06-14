@@ -11,6 +11,7 @@ import numpy as np
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
 import torch
+from rl.train import NUM_TRAINING_STEPS
 
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
@@ -36,14 +37,13 @@ total_coverage = data["total_coverage"]
 vocab = vocab_data["vocab"]
 token_to_id = vocab_data["token_to_id"]
 
-start = datetime.now()
-save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f") + "_baseline"
+fuzz_start = datetime.now()
+save_folder_name = fuzz_start.strftime("%Y-%m-%dT%H:%M:.%f") + "_baseline"
 data_save_folder = Path("data") / save_folder_name
 os.makedirs(data_save_folder, exist_ok=True)
 
 INTERESTING_FOLDER = Path("corpus/interesting")
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
-MAX_STEPS = 3000
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
@@ -72,7 +72,7 @@ episode_coverage: list[float] = []
 episode_actions: list[list[tuple[int, str]]] = []
 
 try:
-    while total_steps < MAX_STEPS:
+    while total_steps < NUM_TRAINING_STEPS:
         state, info = env.reset()
         done, truncated = False, False
         episode_reward: list[float] = []
@@ -130,7 +130,7 @@ finally:
 
     logging.info(f"Initial coverage: {initial_coverage}")
     logging.info(
-        f"Finished with final coverage: {env.total_coverage} in {end - start}",
+        f"Finished with final coverage: {env.total_coverage} in {end - fuzz_start}",
     )
     logging.info(
         f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"

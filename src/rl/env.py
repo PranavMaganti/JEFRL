@@ -18,7 +18,6 @@ from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
 from rl.tokenizer import ASTTokenizer
 import torch
-from transformers import RobertaModel
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine
@@ -28,6 +27,7 @@ from utils.js_engine import ExecutionData
 STATEMENT_PENALTY_WEIGHT = 3
 COVERAGE_REWARD_WEIGHT = 2
 MAX_STATEMENTS = 100
+MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
 
 
 class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
@@ -46,7 +46,22 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
-        # self.observation_space = spaces.Box() # type: ignore
+        self.observation_space = spaces.Tuple(
+            (
+                spaces.Box(
+                    low=0,
+                    high=len(tokenizer.vocab) - 1,
+                    shape=(MAX_FRAGMENT_SEQ_LEN,),
+                    dtype=np.int64,
+                ),
+                spaces.Box(
+                    low=0,
+                    high=len(tokenizer.vocab) - 1,
+                    shape=(MAX_FRAGMENT_SEQ_LEN,),
+                    dtype=np.int64,
+                ),
+            )
+        )
         self.render_mode = render_mode
 
         self.corpus = corpus
@@ -131,10 +146,15 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         elif exec_data.coverage.hit_edges > self._state.exec_data.coverage.hit_edges:
             # reward increasing coverage of test case but less than the reward for
             # increasing total coverage
+            self.coverage_increased = True
             return 1 + penalty
         else:
+            if self.num_mutations >= self.max_mutations and not self.coverage_increased:
+                # episode is over and coverage did not increase
+                return -2 + penalty
+            
             # new test case did not increase its own coverage
-            return -1 + penalty
+            return 0 + penalty
 
     def _get_done(self, exec_data: Optional[ExecutionData] = None) -> bool:
         return exec_data is not None and exec_data.is_crash()

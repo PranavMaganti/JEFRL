@@ -1,7 +1,7 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import ArrowFunctionExpression
+from js_ast.nodes import ArrowFunctionExpression, CatchClause
 from js_ast.nodes import AssignmentPattern
 from js_ast.nodes import BlockStatement
 from js_ast.nodes import CallExpression
@@ -152,7 +152,9 @@ def fix_node_references(
     node: Node, subtrees: dict[str, list[Node]], target: Optional[Node] = None
 ):
     if isinstance(node, Identifier):
-        if isinstance(node.parent, MemberExpression) and node.parent.object != node:
+        if (
+            isinstance(node.parent, MemberExpression) and node.parent.object != node
+        ) or (isinstance(node.parent, CatchClause)):
             return
 
         if isinstance(

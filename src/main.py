@@ -14,6 +14,7 @@ from optimum.bettertransformer import BetterTransformer
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
+from rl.env import MAX_FRAGMENT_SEQ_LEN
 from rl.fuzzing_action import FuzzingAction
 from rl.tokenizer import ASTTokenizer
 
@@ -25,11 +26,13 @@ from rl.train import EPS_END
 from rl.train import EPS_START
 from rl.train import epsilon_greedy
 from rl.train import GAMMA
+from rl.train import GRADIENT_CLIP
 from rl.train import LR
 from rl.train import NUM_TRAINING_STEPS
 from rl.train import optimise_model
 from rl.train import REPLAY_MEMORY_SIZE
 from rl.train import soft_update_params
+from rl.train import TARGET_UPDATE
 from rl.train import TAU
 import torch
 from torch import optim
@@ -40,14 +43,7 @@ from utils.js_engine import V8Engine
 from utils.logging import setup_logging
 
 
-seed = 20
-random.seed(seed)
-np.random.seed(seed)
-torch.manual_seed(seed)
-
-
 INTERESTING_FOLDER = Path("corpus/interesting")
-MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
 
 seed = random.randint(0, 2**32 - 1)
 random.seed(seed)
@@ -173,7 +169,9 @@ with open(data_save_folder / "hyperparameters.json", "w") as f:
                 "gamma": GAMMA,
                 "batch_size": BATCH_SIZE,
                 "tau": TAU,
+                "target_update": TARGET_UPDATE,
                 "action_weights": ACTION_WEIGHTS,
+                "gradient_clip": GRADIENT_CLIP,
                 # "grad_accumulation_steps": GRAD_ACCUMULATION_STEPS,
                 "seed": seed,
             }
@@ -257,10 +255,11 @@ try:
             end = datetime.now()
             print(f"Optimisation took {(end - start).total_seconds()} seconds")
 
-            start = datetime.now()
-            soft_update_params(policy_net, target_net)
-            end = datetime.now()
-            print(f"Soft update took {(end - start).total_seconds()} seconds")
+            if total_steps % TARGET_UPDATE == 0:
+                start = datetime.now()
+                soft_update_params(policy_net, target_net)
+                end = datetime.now()
+                print(f"Soft update took {(end - start).total_seconds()} seconds")
 
             losses.append(loss)
 
