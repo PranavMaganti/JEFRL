@@ -52,6 +52,18 @@ non_add_types = {
     "Super",
 }
 
+REPLACE_FUNCTIONS = [
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "encodeURI",
+    "decodeURI",
+    "eval",
+    "require",
+    "gc",
+]
+
 
 def replace(
     subtrees: dict[str, list[Node]], target: Node, root: Node
@@ -63,13 +75,27 @@ def replace(
         return target, False
 
     if target.type == "Literal" or target.type == "Identifier":
-        new_node = random_value(target.parent.scope, target.parent, subtrees)
+        scope_analysis(root)
+        scope = target.parent.scope
+
+        if target.parent.type == "CallExpression" and target.parent.callee is target:
+            available_functions = scope.available_functions()
+
+            if available_functions:
+                function = random.choice(list(scope.available_functions().keys()))
+            else:
+                function = random.choice(REPLACE_FUNCTIONS)
+
+            new_node = Identifier(name=function, parent=target.parent)
+        else:
+            new_node = random_value(scope, target.parent, subtrees)
     else:
         new_node = copy.deepcopy(random.choice(subtrees[target.type]))
         new_node.parent = target.parent
 
     print(target)
     print(target.parent)
+    print(target.parent.parent)
     print(new_node)
 
     # TODO: Tidy up this code by possibly adding field to parent property of node
@@ -100,6 +126,7 @@ def replace(
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root, subtrees, new_node)
     print(target.parent)
+    print(target.parent.parent)
 
     return new_node, True
 
@@ -134,7 +161,7 @@ def remove(
                     return target.parent, True
         elif val is target:
             return target, False
-        
+
     raise ValueError("Could not find target in parent")
 
 

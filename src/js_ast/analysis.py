@@ -169,9 +169,11 @@ def fix_node_references(
         if not scope:
             print(node.parent)
             raise Exception("Scope not found")
+        
+        available_variables = scope.available_variables()
 
-        if scope.available_variables() and node.name not in scope.available_variables():
-            node.name = random.choice(list(scope.available_variables()))
+        if available_variables and node.name not in available_variables:
+            node.name = random.choice(list(available_variables))
 
     elif isinstance(node, CallExpression) and isinstance(node.callee, Identifier):
         scope = node.scope
@@ -179,14 +181,16 @@ def fix_node_references(
         if not scope:
             print(node.parent)
             raise Exception("Scope not found")
+        
+        available_functions = scope.available_functions()
 
         if (
-            scope.available_functions()
-            and node.callee.name not in scope.available_functions()
+            available_functions
+            and node.callee.name not in available_functions
             and node.callee.name not in INBUILT_FUNCTIONS
         ):
             function, num_params = random.choice(
-                list(scope.available_functions().items())
+                list(available_functions.items())
             )
             node.callee.name = function
             if target and target.parent == node:
@@ -203,7 +207,6 @@ def fix_node_references(
     else:
         for child in node.children():
             fix_node_references(child, subtrees, target)
-
 
 # Gets random literal or identifier
 def random_value(scope: Scope, parent: Node, subtrees: dict[str, list[Node]]):

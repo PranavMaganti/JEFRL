@@ -43,6 +43,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         interesting_folder: Path,
         max_mutations: int = 25,
         max_statements: int = MAX_STATEMENTS,
+        max_eps_without_coverage_increase: int = 500,
         render_mode: Optional[str] = None,
     ):
         self.action_space = spaces.Discrete(len(FuzzingAction))
@@ -65,7 +66,10 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         self.render_mode = render_mode
 
         self.corpus = corpus
-        self.corpus_selection_count = [1 for _ in corpus]
+
+        # Stores number of times each program in the corpus has been selected
+        # since last coverage increase
+        self.corpus_selection_count = [0] * len(corpus)
 
         self.subtrees = subtrees
         self.engine = engine
@@ -74,12 +78,16 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         os.makedirs(self.interesting_folder, exist_ok=True)
 
         self._state: ProgramState
+        self._state_idx: int
+
         self.num_mutations = 0  # number of mutations performed
         self.max_mutations = max_mutations  # max number of mutations to perform
         self.max_statements = max_statements  # max number of statements in a program
+        self.max_eps_without_coverage_increase = max_eps_without_coverage_increase
 
         self.total_coverage = total_coverage
-        self.coverage_increased = False  # whether coverage has increased
+        self.test_coverage_increased = False  # whether coverage has increased
+        self.total_coverage_increased = False  # whether coverage has increased
 
         self.total_executions = 0
         self.total_actions = 0
@@ -133,26 +141,28 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
         if new_total_coverage != self.total_coverage:
             # new test case increased its own coverage and the total coverage
-            self.coverage_increased = True
+            self.total_coverage_increased = True
+            self.test_coverage_increased = True
+
             logging.info(
                 f"Coverage increased from {self.total_coverage} to {new_total_coverage}"
             )
             self.save_current_state("coverage", exec_data)
             self.corpus.append(self._state)
-            self.corpus_selection_count.append(1)
+            self.corpus_selection_count.append(0)
             self.total_coverage = new_total_coverage
 
             return 2 + penalty
         elif exec_data.coverage.hit_edges > self._state.exec_data.coverage.hit_edges:
             # reward increasing coverage of test case but less than the reward for
             # increasing total coverage
-            self.coverage_increased = True
+            self.test_coverage_increased = True
             return 1 + penalty
         else:
-            if self.num_mutations >= self.max_mutations and not self.coverage_increased:
+            if self._get_truncated() and not self.total_coverage_increased:
                 # episode is over and coverage did not increase
                 return -2 + penalty
-            
+
             # new test case did not increase its own coverage
             return 0 + penalty
 
@@ -170,21 +180,37 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], dict[str, Any]]:
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
+        if hasattr(self, "_state"):
+            if self.total_coverage_increased:
+                self.corpus_selection_count[self._state_idx] = 0
+            else:
+                self.corpus_selection_count[self._state_idx] += 1
+                if (
+                    self.corpus_selection_count[self._state_idx]
+                    >= self.max_eps_without_coverage_increase
+                ):
+                    self.corpus.pop(self._state_idx)
+                    self.corpus_selection_count.pop(self._state_idx)
+
+                    logging.info(
+                        f"Removed program from corpus: {self._state.generate_program_code()}"
+                    )
 
         # We want to choose a program state with low selection count
         # program_state_counts = np.array(self.corpus_selection_count)
         # inverted_counts = (np.max(program_state_counts) + 1) - program_state_counts
         # weights = inverted_counts / np.sum(inverted_counts)
         # program_state_idx = self.np_random.choice(len(self.corpus), p=weights)
-        program_state_idx = self.np_random.choice(len(self.corpus))
-        self.corpus_selection_count[program_state_idx] += 1
-        self._state = copy.deepcopy(self.corpus[program_state_idx])
+        self._state_idx = self.np_random.choice(len(self.corpus))
+        self._state = copy.deepcopy(self.corpus[self._state_idx])
+
         scope_analysis(self._state.program)
 
         # Initialise state as random child of the root node
         self._state.move_down()
         self.num_mutations = 0
-        self.coverage_increased = False
+        self.total_coverage_increased = False
+        self.test_coverage_increased = False
 
         logging.info("Starting new episode")
 
@@ -294,7 +320,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
-            0 if self.coverage_increased else -2,
+            0 if self.total_coverage_increased else -2,
             True,
             self._get_done(),
             self._get_info(),
