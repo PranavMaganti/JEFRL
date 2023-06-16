@@ -126,7 +126,8 @@ class ExecutionData:
 
 
 class Engine(ABC):
-    def __init__(self) -> None:
+    def __init__(self, base_path: Path = Path(".")) -> None:
+        self.base_path = base_path
         with open(self.corpus_lib_path, "r") as f:
             self.lib = f.read()
 
@@ -230,12 +231,12 @@ class V8Engine(Engine):
 
     @property
     def executable(self) -> Path:
-        return ENGINES_DIR / "v8/v8/out/fuzzbuild/d8"
+        return self.base_path / ENGINES_DIR / "v8/v8/out/fuzzbuild-v8.5/d8"
 
     @property
     def corpus_path(self) -> Path:
-        return CORPUS_DIR / "v8-2020"
+        return self.base_path / CORPUS_DIR / "v8-2020"
 
     @property
     def corpus_lib_path(self) -> Path:
-        return CORPUS_DIR / "libs/v8.js"
+        return self.base_path / CORPUS_DIR / "libs/v8.js"

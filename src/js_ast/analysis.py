@@ -25,7 +25,7 @@ from utils.interesting_values import interesting_floats
 from utils.interesting_values import interesting_integers
 
 
-INBUILT_FUNCTIONS = set(
+BUILTIN_FUNCTIONS = set(
     [
         "gc",
         "print",
@@ -39,6 +39,52 @@ INBUILT_FUNCTIONS = set(
         "isNaN",
         "isFinite",
         "encodeURI",
+        "encodeURIComponent",
+        "decodeURIComponent",
+    ]
+)
+
+BUILTIN_CONSTRUCTORS = set(
+    [
+        "Object",
+        "Function",
+        "Boolean",
+        "Symbol",
+        "Error",
+        "EvalError",
+        "InternalError",
+        "RangeError",
+        "ReferenceError",
+        "SyntaxError",
+        "TypeError",
+        "URIError",
+        "Number",
+        "BigInt",
+        "Math",
+        "Date",
+        "String",
+        "RegExp",
+        "Array",
+        "Int8Array",
+        "Uint8Array",
+        "Uint8ClampedArray",
+        "Int16Array",
+        "Uint16Array",
+        "Int32Array",
+        "Uint32Array",
+        "Float32Array",
+        "Float64Array",
+        "BigInt64Array",
+        "BigUint64Array",
+        "Map",
+        "Set",
+        "WeakMap",
+        "WeakSet",
+        "ArrayBuffer",
+        "SharedArrayBuffer",
+        "Atomics",
+        "DataView",
+        "JSON",
     ]
 )
 
@@ -169,7 +215,7 @@ def fix_node_references(
         if not scope:
             print(node.parent)
             raise Exception("Scope not found")
-        
+
         available_variables = scope.available_variables()
 
         if available_variables and node.name not in available_variables:
@@ -181,17 +227,16 @@ def fix_node_references(
         if not scope:
             print(node.parent)
             raise Exception("Scope not found")
-        
+
         available_functions = scope.available_functions()
 
         if (
             available_functions
             and node.callee.name not in available_functions
-            and node.callee.name not in INBUILT_FUNCTIONS
+            and node.callee.name not in BUILTIN_FUNCTIONS
+            and node.callee.name not in BUILTIN_CONSTRUCTORS
         ):
-            function, num_params = random.choice(
-                list(available_functions.items())
-            )
+            function, num_params = random.choice(list(available_functions.items()))
             node.callee.name = function
             if target and target.parent == node:
                 node.arguments = [target] + [
@@ -207,6 +252,7 @@ def fix_node_references(
     else:
         for child in node.children():
             fix_node_references(child, subtrees, target)
+
 
 # Gets random literal or identifier
 def random_value(scope: Scope, parent: Node, subtrees: dict[str, list[Node]]):

@@ -6,9 +6,11 @@ import pickle
 from typing import Optional
 
 import esprima
+from js_ast.analysis import count_statements
 from js_ast.nodes import Node
 from js_ast.nodes import UnknownNodeTypeError
 from preprocessing.sanitise import sanitise_ast
+from rl.env import MAX_STATEMENTS
 from rl.program_state import ProgramState
 import tqdm
 
@@ -126,7 +128,10 @@ def get_subtrees(states: list[ProgramState]) -> dict[str, list[Node]]:
     for state in tqdm.tqdm(states, desc="Collecting subtrees"):
         for node in state.target_node.traverse():
             if hasattr(node, "type"):
-                subtrees[node.type].append(node)
+                statement_count = count_statements(node)
+
+                if statement_count < MAX_STATEMENTS:
+                    subtrees[node.type].append(node)
 
     return subtrees
 

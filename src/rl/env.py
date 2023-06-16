@@ -26,7 +26,9 @@ from utils.js_engine import ExecutionData
 
 STATEMENT_PENALTY_WEIGHT = 3
 COVERAGE_REWARD_WEIGHT = 2
-MAX_STATEMENTS = 100
+
+PENALTY_STATEMENTS = 100
+MAX_STATEMENTS = 1000
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
 
 
@@ -42,6 +44,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         tokenizer: ASTTokenizer,
         interesting_folder: Path,
         max_mutations: int = 25,
+        penalty_statements: int = PENALTY_STATEMENTS,
         max_statements: int = MAX_STATEMENTS,
         max_eps_without_coverage_increase: int = 500,
         render_mode: Optional[str] = None,
@@ -82,6 +85,9 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
         self.num_mutations = 0  # number of mutations performed
         self.max_mutations = max_mutations  # max number of mutations to perform
+        self.penalty_statements = (
+            penalty_statements  # number of statements after which to apply penalty
+        )
         self.max_statements = max_statements  # max number of statements in a program
         self.max_eps_without_coverage_increase = max_eps_without_coverage_increase
 
@@ -126,7 +132,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
     def _get_reward(self, exec_data: Optional[ExecutionData] = None) -> float:
         num_statements = count_statements(self._state.program)
-        penalty = min(0, 1 - num_statements / self.max_statements)
+        penalty = min(0, 1 - num_statements / self.penalty_statements)
 
         if exec_data is None:
             return penalty
@@ -170,7 +176,11 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         return exec_data is not None and exec_data.is_crash()
 
     def _get_truncated(self) -> bool:
-        return self.num_mutations >= self.max_mutations
+        num_statements = count_statements(self._state.program)
+        return (
+            self.num_mutations >= self.max_mutations
+            or num_statements >= self.max_statements
+        )
 
     def reset(
         self,

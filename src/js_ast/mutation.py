@@ -2,7 +2,7 @@ import copy
 import random
 from typing import Tuple
 
-from js_ast.analysis import fix_node_references
+from js_ast.analysis import BUILTIN_CONSTRUCTORS, fix_node_references
 from js_ast.analysis import random_value
 from js_ast.analysis import scope_analysis
 from js_ast.nodes import AssignmentExpression
@@ -82,9 +82,19 @@ def replace(
             available_functions = scope.available_functions()
 
             if available_functions:
-                function = random.choice(list(scope.available_functions().keys()))
+                function = random.choice(list(available_functions.keys()))
             else:
                 function = random.choice(REPLACE_FUNCTIONS)
+
+            new_node = Identifier(name=function, parent=target.parent)
+
+        elif target.parent.type == "NewExpression" and target.parent.left is target:
+            available_classes = scope.available_classes()
+
+            if available_classes:
+                function = random.choice(list(available_classes))
+            else:
+                function = random.choice(BUILTIN_CONSTRUCTORS)
 
             new_node = Identifier(name=function, parent=target.parent)
         else:
@@ -93,10 +103,10 @@ def replace(
         new_node = copy.deepcopy(random.choice(subtrees[target.type]))
         new_node.parent = target.parent
 
-    print(target)
-    print(target.parent)
-    print(target.parent.parent)
-    print(new_node)
+    # print(target)
+    # print(target.parent)
+    # print(target.parent.parent)
+    # print(new_node)
 
     # TODO: Tidy up this code by possibly adding field to parent property of node
     # which indicates which field in the parent the child belongs to
@@ -125,8 +135,8 @@ def replace(
     scope_analysis(root)
     # Fix references in all nodes as we may have replaced function/variable declarations
     fix_node_references(root, subtrees, new_node)
-    print(target.parent)
-    print(target.parent.parent)
+    # print(target.parent)
+    # print(target.parent.parent)
 
     return new_node, True
 
@@ -137,8 +147,8 @@ def remove(
     if target.parent is None:
         return target, False
 
-    print(target)
-    print(target.parent)
+    # print(target)
+    # print(target.parent)
 
     for field in target.parent.fields:
         val = getattr(target.parent, field)
