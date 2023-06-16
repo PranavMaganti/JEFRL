@@ -126,10 +126,14 @@ class ExecutionData:
 
 
 class Engine(ABC):
-    def __init__(self, base_path: Path = Path(".")) -> None:
+    def __init__(self, base_path: Path = Path("."), version: str = "latest") -> None:
         self.base_path = base_path
         with open(self.corpus_lib_path, "r") as f:
             self.lib = f.read()
+        self.version = version
+
+        if not self.executable.exists():
+            raise FileNotFoundError(f"Executable not found: {self.executable}")
 
     @property
     @abstractmethod
@@ -231,7 +235,7 @@ class V8Engine(Engine):
 
     @property
     def executable(self) -> Path:
-        return self.base_path / ENGINES_DIR / "v8/v8/out/fuzzbuild-v8.5/d8"
+        return self.base_path / ENGINES_DIR / f"v8/v8/out/fuzzbuild-{self.version}/d8"
 
     @property
     def corpus_path(self) -> Path:
