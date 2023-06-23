@@ -12,9 +12,10 @@ fetch v8
 
 # Checkout v8 version and update dependencies
 cd v8
-git checkout d8217c3257d905a6e32e28f7c7ac6328a1be343f
+git checkout 8.5-lkgr
 gclient sync
 
 # Build d8
-gn gen out/fuzzbuild --args='is_debug=false dcheck_always_on=true v8_static_library=true v8_enable_slow_dchecks=true v8_enable_v8_checks=true v8_enable_verify_heap=true v8_enable_verify_csa=true v8_fuzzilli=true v8_enable_verify_predictable=true sanitizer_coverage_flags="trace-pc-guard" target_cpu="x64"'
-ninja -C ./out/fuzzbuild d8
+gn gen out/fuzzbuild-latest --args='is_debug=false dcheck_always_on=true v8_static_library
+=true v8_enable_verify_heap=true v8_fuzzilli=true sanitizer_coverage_flags="trace-pc-guard" target_cpu="x64"is_asan=true is_lsan=true is_ubsan=true is_ubsan_no_recover=true'
+ninja -C ./out/fuzzbuild-8.5 d8

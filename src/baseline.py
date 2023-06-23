@@ -1,21 +1,30 @@
 # Initial coverage: 14.7366%  Final coverage: 14.86%
 from datetime import datetime
+import json
 import logging
 import os
 from pathlib import Path
 import pickle
+import random
 import sys
 import traceback
 
 import numpy as np
 from rl.env import FuzzingEnv
 from rl.tokenizer import ASTTokenizer
-import torch
 from rl.train import NUM_TRAINING_STEPS
+import torch
 
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging
 
+
+ENGINE_VERSION = "8.5"
+
+seed = random.randint(0, 2**32 - 1)
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
 
 # System setup
 sys.setrecursionlimit(10000)
@@ -24,7 +33,7 @@ sys.setrecursionlimit(10000)
 setup_logging()
 
 logging.info("Loading preprocessed data")
-with open("data/js-rl/corpus.pkl", "rb") as f:
+with open(f"data/js-rl/corpus-{ENGINE_VERSION}.pkl", "rb") as f:
     data = pickle.load(f)
 
 with open("ASTBERTa/vocab_data.pkl", "rb") as f:
@@ -50,7 +59,7 @@ tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
 
 
 logging.info("Initialising environment")
-engine = V8Engine()
+engine = V8Engine(version=ENGINE_VERSION)
 env = FuzzingEnv(
     corpus,
     subtrees,
@@ -59,6 +68,17 @@ env = FuzzingEnv(
     tokenizer,
     INTERESTING_FOLDER / save_folder_name,
 )
+
+with open(data_save_folder / "hyperparameters.json", "w") as f:
+    f.write(
+        json.dumps(
+            {
+                "num_training_steps": NUM_TRAINING_STEPS,
+                "seed": seed,
+                "engine_version": ENGINE_VERSION,
+            }
+        )
+    )
 
 
 logging.info(f"Initial coverage: {env.total_coverage}")
@@ -105,12 +125,16 @@ try:
                         {
                             "episode_actions": episode_actions,
                             "episode_rewards": episode_rewards,
-                            "current_coverage": current_coverage,
-                            "execution_coverage": execution_coverage,
                             "episode_coverage": episode_coverage,
+                            "execution_coverage": execution_coverage,
+                            "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
-                            "running_time": datetime.now() - start,
+                            "failed_actions": env.failed_actions,
+                            "running_time": datetime.now() - fuzz_start,
+                            "action_times": env.action_times,
+                            "exec_times": env.exec_times,
+                            "code_gen_times": env.code_gen_times,
                         },
                         f,
                     )
@@ -128,12 +152,12 @@ finally:
     final_coverage = env.total_coverage.coverage()
     episode_rewards_summed = [sum(episode) for episode in episode_rewards]
 
-    logging.info(f"Initial coverage: {initial_coverage}")
+    logging.info(f"Initial coverage: {initial_coverage:.5%}")
     logging.info(
         f"Finished with final coverage: {env.total_coverage} in {end - fuzz_start}",
     )
     logging.info(
-        f"Coverage increase: {env.total_coverage.coverage() - initial_coverage}"
+        f"Coverage increase: {(env.total_coverage.coverage() - initial_coverage):.5%}"
     )
     logging.info(f"Average reward: {np.mean(episode_rewards_summed):.2f}")
     logging.info(f"Total steps: {env.total_actions}")

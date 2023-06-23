@@ -11,31 +11,30 @@ import sys
 import traceback
 
 import numpy as np
-from optimum.bettertransformer import BetterTransformer
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
 from rl.env import MAX_FRAGMENT_SEQ_LEN
-from rl.fuzzing_action import FuzzingAction
-from rl.tokenizer import ASTTokenizer
 
 # from rl.train import GRAD_ACCUMULATION_STEPS
-from rl.train import BATCH_SIZE
-from rl.train import EPS_DECAY
-from rl.train import EPS_END
-from rl.train import EPS_START
-from rl.train import epsilon_greedy
-from rl.train import GAMMA
-from rl.train import GRADIENT_CLIP
-from rl.train import LR
-from rl.train import MAX_MUTATIONS
-from rl.train import NUM_TRAINING_STEPS
-from rl.train import optimise_model
-from rl.train import REPLAY_MEMORY_SIZE
-from rl.train import soft_update_params
-from rl.train import TARGET_UPDATE
-from rl.train import TAU
-from rl.train import WARM_UP_STEPS
+from rl.finetuning import BATCH_SIZE
+from rl.finetuning import EPS_DECAY
+from rl.finetuning import EPS_END
+from rl.finetuning import EPS_START
+from rl.finetuning import epsilon_greedy
+from rl.finetuning import GAMMA
+from rl.finetuning import GRADIENT_CLIP
+from rl.finetuning import LR
+from rl.finetuning import MAX_MUTATIONS
+from rl.finetuning import NUM_TRAINING_STEPS
+from rl.finetuning import optimise_model
+from rl.finetuning import REPLAY_MEMORY_SIZE
+from rl.finetuning import soft_update_params
+from rl.finetuning import TARGET_UPDATE
+from rl.finetuning import TAU
+from rl.finetuning import WARM_UP_STEPS
+from rl.fuzzing_action import FuzzingAction
+from rl.tokenizer import ASTTokenizer
 import torch
 from torch import optim
 from transformers import get_linear_schedule_with_warmup
@@ -49,8 +48,19 @@ from utils.logging import setup_logging
 INTERESTING_FOLDER = Path("corpus/interesting")
 ENGINE_VERSION = "8.5"
 
-os.makedirs("out/rl-training", exist_ok=True)
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--pretraining-path", type=str, help="The path to the pretraining model folder"
+)
+parser.add_argument(
+    "--pretraining-step", type=int, help="The step of the pretraining model to load"
+)
 
+args = parser.parse_args()
+
+pretrained_model = torch.load(
+    f"out/pretraining/{args.pretraining_path}/model-{args.pretraining_step}.pt"
+)
 
 seed = random.randint(0, 2**32 - 1)
 random.seed(seed)
@@ -66,22 +76,13 @@ setup_logging()
 
 # Load preprocessed data
 logging.info("Loading preprocessed data")
-with open(f"data/corpus-{ENGINE_VERSION}.pkl", "rb") as f:
+with open(f"data/js-rl/corpus-{ENGINE_VERSION}.pkl", "rb") as f:
     data = pickle.load(f)
 
-with open("data/vocab_data.pkl", "rb") as f:
+with open("ASTBERTa/vocab_data.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
-
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "--finetuning-path", type=str, help="The path to the finetuning model folder"
-)
-parser.add_argument(
-    "--finetuning-step", type=int, help="The step of the finetuning model to load"
-)
-
-args = parser.parse_args()
+corpus = data["corpus"]
 subtrees = data["subtrees"]
 total_coverage = data["total_coverage"]
 
@@ -109,28 +110,18 @@ config = RobertaConfig(
     max_position_embeddings=MAX_FRAGMENT_SEQ_LEN + 2,
 )
 
-
 # Load the ASTBERTa model
 tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN, device)
-pretrained_model = torch.load(
-    f"out/finetuning/{args.finetuning_path}/ast_net_{args.finetuning_step}.pt"
-)
+
 
 ast_net = RobertaModel.from_pretrained(
     pretrained_model_name_or_path=None,
-    state_dict=pretrained_model,
+    state_dict=pretrained_model.state_dict(),
     config=config,
 ).to(device)
-ast_net = BetterTransformer.transform(ast_net)
-ast_net.eval()
 
-# Check types of the loaded model
+
 assert isinstance(config, RobertaConfig)
-# assert isinstance(ast_net, RobertaModel)
-
-for param in ast_net.parameters():
-    param.requires_grad = False
-
 
 # Initialise policy and target networks
 logging.info("Initialising policy and target networks")
@@ -140,18 +131,15 @@ n_actions = len(FuzzingAction)
 # Input size to the DQN is the size of the ASTBERTa hidden state * 2 (target and context)
 n_observations = hidden_size * 2
 
-# pretrained_policy_net = torch.load("data/2023-06-15T03:37:.169321/policy_net_55000.pt")
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
-
-# policy_net.load_state_dict(pretrained_policy_net.state_dict())
 target_net.load_state_dict(policy_net.state_dict())
 
 for param in target_net.parameters():
     param.requires_grad = False
 
 optimizer = optim.AdamW(
-    [*policy_net.parameters()],
+    [*ast_net.parameters(), *policy_net.parameters()],
     lr=LR,
     amsgrad=True,
 )
@@ -162,12 +150,13 @@ lr_scheduler = get_linear_schedule_with_warmup(
 )
 memory = ReplayMemory(REPLAY_MEMORY_SIZE)
 
-logging.info("Setting up environment")
+# Setup environment
 fuzz_start = datetime.now()
 save_folder_name = fuzz_start.strftime("%Y-%m-%dT%H:%M:.%f")
-data_save_folder = Path("out/rl-training") / save_folder_name
+data_save_folder = Path("data/") / save_folder_name
 os.makedirs(data_save_folder, exist_ok=True)
 
+logging.info("Setting up environment")
 engine = V8Engine(version=ENGINE_VERSION)
 env = FuzzingEnv(
     corpus,
@@ -187,7 +176,6 @@ with open(data_save_folder / "hyperparameters.json", "w") as f:
                 "num_training_steps": NUM_TRAINING_STEPS,
                 "replay_memory_size": REPLAY_MEMORY_SIZE,
                 "learning_rate": LR,
-                # "warm_up_steps": WARM_UP_STEPS,
                 "max_fragment_seq_len": MAX_FRAGMENT_SEQ_LEN,
                 "max_mutations": MAX_MUTATIONS,
                 "astberta_config": {
@@ -206,9 +194,11 @@ with open(data_save_folder / "hyperparameters.json", "w") as f:
                 "tau": TAU,
                 "target_update": TARGET_UPDATE,
                 "gradient_clip": GRADIENT_CLIP,
+                # "grad_accumulation_steps": GRAD_ACCUMULATION_STEPS,
                 "seed": seed,
                 "engine_version": ENGINE_VERSION,
-                "pretrained_models": (args.finetuning_path, args.finetuning_step),
+                "info": "Added new reward for decreased coverage, and added leaky_relu",
+                "dqn arch": "512, 256",
             }
         )
     )
@@ -223,25 +213,12 @@ execution_coverage: dict[tuple[int, int], float] = {}
 episode_coverage: list[float] = [initial_coverage]
 episode_actions: list[list[tuple[int, str]]] = []
 
-optimization_times: list[float] = []
-
 losses: list[float] = []
-
-
-def get_state_embedding(
-    state: tuple[torch.Tensor, torch.Tensor],
-    ast_net: RobertaModel,
-    tokenizer: ASTTokenizer,
-) -> torch.Tensor:
-    batch = tokenizer.pad_batch(list(state))
-    return ast_net(**batch).pooler_output.view(1, -1)
 
 
 try:
     while total_steps < NUM_TRAINING_STEPS:
         state, info = env.reset()
-        state_embedding = get_state_embedding(state, ast_net, tokenizer)
-
         done, truncated = False, False
         episode_reward: list[float] = []
         episode_action: list[tuple[int, str]] = []
@@ -249,52 +226,49 @@ try:
         while not done and not truncated:
             ep_start = datetime.now()
             action = epsilon_greedy(
-                policy_net, state_embedding, env, total_steps, device
+                ast_net, tokenizer, policy_net, state, env, total_steps, device
             )
             episode_action.append((action.item(), env._state.target_node.type))
 
             start = datetime.now()
             next_state, reward, truncated, done, info = env.step(action.item())
             end = datetime.now()
-            logging.debug(f"Step took {(end - start).total_seconds()} seconds")
+            print(f"Step took {(end - start).total_seconds()} seconds")
             episode_reward.append(reward)
             total_steps += 1
 
-            next_state_embedding = get_state_embedding(next_state, ast_net, tokenizer)
+            # next_state_embedding = get_state_embedding(next_state, ast_net, tokenizer)
 
             memory.push(
-                state_embedding,
+                state,
                 action,
-                next_state_embedding,
+                next_state,
                 torch.tensor([reward], device=device),
             )
 
             start = datetime.now()
             loss = optimise_model(
+                ast_net,
+                tokenizer,
                 policy_net,
                 target_net,
                 optimizer,
-                lr_scheduler,
+                # lr_scheduler,
                 memory,
                 device,
             )
             end = datetime.now()
-            optimization_times.append((end - start).total_seconds())
-            logging.debug(f"Optimisation took {(end - start).total_seconds()} seconds")
+            print(f"Optimisation took {(end - start).total_seconds()} seconds")
 
             if total_steps % TARGET_UPDATE == 0:
                 start = datetime.now()
                 soft_update_params(policy_net, target_net)
                 end = datetime.now()
-                logging.debug(
-                    f"Soft update took {(end - start).total_seconds()} seconds"
-                )
+                print(f"Soft update took {(end - start).total_seconds()} seconds")
 
             losses.append(loss)
 
             state = next_state
-            state_embedding = next_state_embedding
-
             if total_steps % 100 == 0:
                 execution_coverage[
                     (env.total_executions, total_steps)
@@ -302,6 +276,7 @@ try:
 
             if total_steps % 1000 == 0:
                 # torch.save(ast_net, data_save_folder / f"ast_net_{total_steps}.pt")
+
                 current_coverage = env.total_coverage.coverage()
                 total_executions = env.total_executions
 
@@ -312,22 +287,16 @@ try:
                             "episode_rewards": episode_rewards,
                             "episode_coverage": episode_coverage,
                             "execution_coverage": execution_coverage,
-                            "execution_errors": env.exec_errors,
                             "current_coverage": current_coverage,
                             "total_steps": total_steps,
                             "total_executions": total_executions,
                             "failed_actions": env.failed_actions,
                             "running_time": datetime.now() - fuzz_start,
-                            "optimization_times": optimization_times,
-                            "action_times": env.action_times,
-                            "exec_times": env.exec_times,
-                            "code_gen_times": env.code_gen_times,
                             "losses": losses,
                         },
                         f,
                     )
-
-            if total_steps % 10000 == 0:
+            if total_steps % 5000 == 0:
                 torch.save(
                     policy_net.state_dict(),
                     data_save_folder / f"policy_net_{total_steps}.pt",
@@ -336,15 +305,16 @@ try:
                     target_net.state_dict(),
                     data_save_folder / f"target_net_{total_steps}.pt",
                 )
+                torch.save(
+                    ast_net.state_dict(), data_save_folder / f"ast_net_{total_steps}.pt"
+                )
 
             ep_end = datetime.now()
-            logging.debug(f"Episode took {(ep_end - ep_start).total_seconds()} seconds")
+            print(f"Episode took {(ep_end - ep_start).total_seconds()} seconds")
 
         episode_coverage.append(env.total_coverage.coverage())
         episode_rewards.append(episode_reward)
         episode_actions.append(episode_action)
-
-        logging.debug(f"Episode ended with reward: {sum(episode_reward)}")
 
 
 except Exception as e:

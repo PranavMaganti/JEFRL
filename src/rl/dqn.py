@@ -58,7 +58,7 @@ class DQN(torch.nn.Module):
         self.layer4 = torch.nn.Linear(512, n_actions)
 
     def forward(self, x: torch.Tensor):
-        x = F.relu(self.layer1(x))
-        x = F.relu(self.layer2(x))
-        x = F.relu(self.layer3(x))
+        x = F.leaky_relu(self.layer1(x))
+        x = F.leaky_relu(self.layer2(x))
+        x = F.leaky_relu(self.layer3(x))
         return self.layer4(x)

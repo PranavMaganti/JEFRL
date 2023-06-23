@@ -24,9 +24,6 @@ from utils.js_engine import Engine
 from utils.js_engine import ExecutionData
 
 
-STATEMENT_PENALTY_WEIGHT = 3
-COVERAGE_REWARD_WEIGHT = 2
-
 PENALTY_STATEMENTS = 100
 MAX_STATEMENTS = 1000
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
@@ -99,7 +96,13 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         self.total_actions = 0
         self.failed_actions = []
 
+        self.exec_errors = []
+
         self.tokenizer = tokenizer
+
+        self.exec_times = []
+        self.action_times = []
+        self.code_gen_times = []
 
     def save_current_state(self, save_type: str, exec_data: ExecutionData) -> None:
         current_time = int(time.time())
@@ -164,6 +167,13 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
             # increasing total coverage
             self.test_coverage_increased = True
             return 1 + penalty
+        elif exec_data.coverage.hit_edges < self._state.exec_data.coverage.hit_edges:
+            if self._get_truncated() and not self.total_coverage_increased:
+                # episode is over and coverage did not increase
+                return -2 + penalty
+
+            # reward decreasing coverage of test case
+            return -0.1 + penalty
         else:
             if self._get_truncated() and not self.total_coverage_increased:
                 # episode is over and coverage did not increase
@@ -236,7 +246,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
             f"Number of mutations: {self.num_mutations}, action: {FuzzingAction(action)}"
         )
         self.total_actions += 1
-
+        start_time = time.time()
         match (action):
             case FuzzingAction.MOVE_UP | FuzzingAction.MOVE_DOWN | FuzzingAction.MOVE_LEFT | FuzzingAction.MOVE_RIGHT:
                 return self._move(action)
@@ -253,9 +263,14 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
                 new_node = self._state.target_node
             case _:
                 raise ValueError(f"Invalid action: {action}")
+        end_time = time.time()
+        logging.info(f"Action time: {end_time - start_time} seconds")
+        self.action_times.append(end_time - start_time)
 
         if not changed:
-            self.failed_actions.append((action, self._state.target_node.type))
+            self.failed_actions.append(
+                (action, self._state.target_node.type, self.total_actions)
+            )
             # Negative reward for action which does not change the state
             return (
                 self._get_obs(),
@@ -270,6 +285,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         start = time.time()
         code = self._state.generate_program_code()
         end = time.time()
+        self.code_gen_times.append(end - start)
         logging.info(f"Code generation time: {end - start} seconds")
 
         if not code:
@@ -285,6 +301,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         start = time.time()
         exec_data = self.engine.execute_text(code)
         end = time.time()
+        self.exec_times.append(end - start)
         logging.info(f"Execution time: {end - start} seconds")
 
         self.total_executions += 1
@@ -292,6 +309,8 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         if not exec_data:
             # Negative reward for invalid program
             return self._get_obs(), -1, self._get_truncated(), True, self._get_info()
+
+        self.exec_errors.append(exec_data.error)
 
         reward = self._get_reward(exec_data)
         done = self._get_done(exec_data)
@@ -319,7 +338,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
         return (
             self._get_obs(),
-            self._get_reward() if moved else -1,
+            0 if moved else -1,
             self._get_truncated(),
             self._get_done(),
             self._get_info(),

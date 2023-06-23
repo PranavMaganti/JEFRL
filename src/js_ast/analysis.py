@@ -1,10 +1,11 @@
 import random
 from typing import Optional
 
-from js_ast.nodes import ArrowFunctionExpression, CatchClause
+from js_ast.nodes import ArrowFunctionExpression
 from js_ast.nodes import AssignmentPattern
 from js_ast.nodes import BlockStatement
 from js_ast.nodes import CallExpression
+from js_ast.nodes import CatchClause
 from js_ast.nodes import ClassBody
 from js_ast.nodes import ClassDeclaration
 from js_ast.nodes import FunctionDeclaration

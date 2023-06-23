@@ -19,7 +19,7 @@ from numpy.typing import NDArray
 
 SHM_SIZE = 0x100000
 MAX_EDGES = (SHM_SIZE - 4) * 8
-SHM_ID = "js_rl"
+SHM_ID = f"js_rl_{os.getpid()}"
 
 TIMEOUT = 0.5
 
@@ -135,6 +135,17 @@ class Engine(ABC):
         if not self.executable.exists():
             raise FileNotFoundError(f"Executable not found: {self.executable}")
 
+    @staticmethod
+    def get_engine(name: str, version: str):
+        match name:
+            case "v8":
+                return V8Engine(version=version)
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+
     @property
     @abstractmethod
     def executable(self) -> Path:
@@ -221,6 +232,10 @@ class Engine(ABC):
 
 
 class V8Engine(Engine):
+    @property
+    def name(self) -> str:
+        return "V8"
+
     @property
     def args(self) -> list[str]:
         return [

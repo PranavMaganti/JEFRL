@@ -13,29 +13,45 @@ from rl.tokenizer import ASTTokenizer
 import torch
 from torch import optim
 import torch.nn as nn
-import torch.nn.functional as F
+from transformers import RobertaModel
 
 
-NUM_TRAINING_STEPS = 800000  # Number of episodes to train the agent for
-LR = 5e-4  # Learning rate of the AdamW optimizer
-REPLAY_MEMORY_SIZE = 100000  # Size of the replay buffer
-MAX_MUTATIONS = 50  # Maximum number of mutations to perform on a code snippet
+NUM_TRAINING_STEPS = 50000  # Number of episodes to train the agent for
+LR = 1e-3  # Learning rate of the AdamW optimizer
+REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
+MAX_MUTATIONS = 50  # Maximum number of mutations to apply to the code snippet
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
-EPS_DECAY = 0.99997  # Controls the rate of exponential decay of epsilon, higher means a slower decay
-BATCH_SIZE = 64  # Number of transitions sampled from the replay buffer
-GAMMA = 0.98  # Discount factor as mentioned in the previous section
+EPS_DECAY = 0.99995  # Controls the rate of exponential decay of epsilon, higher means a slower decay
+BATCH_SIZE = 32  # Number of transitions sampled from the replay buffer
+GAMMA = 0.99  # Discount factor as mentioned in the previous section
 TAU = 1  # Update rate of the target network
 TARGET_UPDATE = 1000  # Number of steps after which the target network is updated
 GRADIENT_CLIP = 1  # Maximum value of the gradient during backpropagation
-WARM_UP_STEPS = 50000  # Number of steps before training begins
+WARM_UP_STEPS = 0  # Number of steps to collect transitions before training starts
+
+# Weights for each action in epsilon-greedy policy to reduce probability of
+# ending the episode early
+
+
+def get_state_embedding(
+    state: list[tuple[torch.Tensor, torch.Tensor]],
+    ast_net: RobertaModel,
+    tokenizer: ASTTokenizer,
+) -> torch.Tensor:
+    flattened_state = [item for sublist in state for item in sublist]
+    batch = tokenizer.pad_batch(flattened_state)
+    state_embedding = ast_net(**batch).pooler_output.view(len(state), -1)
+    return state_embedding
 
 
 # Select action based on epsilon-greedy policy
 def epsilon_greedy(
+    ast_net: RobertaModel,
+    tokenizer: ASTTokenizer,
     policy_net: DQN,
-    state: torch.Tensor,
+    state: tuple[torch.Tensor, torch.Tensor],
     env: FuzzingEnv,
     step: int,
     device: torch.device,
@@ -47,14 +63,14 @@ def epsilon_greedy(
         # Sample action from model depending of state
         with torch.no_grad():
             # Get the code snippet embedding
-            values = policy_net(state)
+            values = policy_net(get_state_embedding([state], ast_net, tokenizer))
             logging.debug(f"Q-values: {values}")
             return values.argmax().view(1, 1)
 
     logging.debug(f"Random action selected, epsilon = {eps_threshold}")
     # Sample random action
     return torch.tensor(
-        [env.action_space.n.sample()],
+        [env.action_space.sample()],
         device=device,
         dtype=torch.long,
     )
@@ -73,10 +89,12 @@ def soft_update_params(policy_net: DQN, target_net: DQN, tau: float = TAU):
 
 
 def optimise_model(
+    ast_net: RobertaModel,
+    tokenizer: ASTTokenizer,
     policy_net: DQN,
     target_net: DQN,
     optimizer: optim.Optimizer,
-    lr_scheduler: optim.lr_scheduler.LambdaLR,
+    # lr_scheduler: optim.lr_scheduler.LambdaLR,
     memory: ReplayMemory,
     device: torch.device,
     batch_size: int = BATCH_SIZE,
@@ -97,17 +115,22 @@ def optimise_model(
     )
     non_final_next_states = [s for s in batch.next_states if s is not None]
 
-    states_batch = torch.cat(batch.states)
-    next_states_batch = torch.cat(non_final_next_states)
+    # states_batch = torch.cat(batch.states)
+    # next_states_batch = torch.cat(non_final_next_states)
     action_batch = torch.cat(batch.actions)
     reward_batch = torch.cat(batch.rewards)
 
-    state_action_values = policy_net(states_batch).gather(1, action_batch)
+    states_batch_embedded = get_state_embedding(batch.states, ast_net, tokenizer)
+
+    state_action_values = policy_net(states_batch_embedded).gather(1, action_batch)
     next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
+        next_states_batch_embedded = get_state_embedding(
+            non_final_next_states, ast_net, tokenizer
+        )
         next_state_values[non_final_mask] = (
-            target_net(next_states_batch)
-            .gather(1, policy_net(next_states_batch).argmax(1, keepdim=True))
+            target_net(next_states_batch_embedded)
+            .gather(1, policy_net(next_states_batch_embedded).argmax(1, keepdim=True))
             .squeeze()
         )
 
@@ -125,6 +148,6 @@ def optimise_model(
     # In-place gradient clipping
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), GRADIENT_CLIP)  # type: ignore
     optimizer.step()
-    lr_scheduler.step()
+    # lr_scheduler.step()
 
     return loss.item()

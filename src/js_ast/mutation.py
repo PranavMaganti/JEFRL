@@ -2,7 +2,8 @@ import copy
 import random
 from typing import Tuple
 
-from js_ast.analysis import BUILTIN_CONSTRUCTORS, fix_node_references
+from js_ast.analysis import BUILTIN_CONSTRUCTORS
+from js_ast.analysis import fix_node_references
 from js_ast.analysis import random_value
 from js_ast.analysis import scope_analysis
 from js_ast.nodes import AssignmentExpression
