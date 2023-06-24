@@ -1,3 +1,4 @@
+import argparse
 from datetime import datetime
 import json
 import os
@@ -14,15 +15,38 @@ from transformers import RobertaConfig
 from transformers import RobertaForMaskedLM
 
 
-os.makedirs("out/pretraining", exist_ok=True)
+parser = argparse.ArgumentParser(
+    prog="JEFRL Pre-training", description="AST Transformer Pre-training for JEFRL"
+)
+
+parser.add_argument(
+    "--data-dir",
+    type=Path,
+    default=Path("data/"),
+    help="The path to which the vocabulary and pretraining data will be saved",
+)
+parser.add_argument(
+    "--output",
+    type=Path,
+    default=Path("out/pretraining/"),
+    help="The path to the output directory in which a new folder with the pretraining results will be saved",
+)
+args = parser.parse_args()
+
+if not args.data_dir.exists():
+    raise ValueError(f"Data directory {args.data_dir} does not exist")
+
+if not args.output.exists():
+    os.makedirs(args.output)
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print("Loading data...")
-with open("ASTBERTa/vocab_data.pkl", "rb") as f:
+with open(args.data_dir / "/ocab_data.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
-with open("data/pretraining_data.pkl", "rb") as f:
+with open(args.data_dir / "pretraining_data.pkl", "rb") as f:
     data = pickle.load(f)
 
 
@@ -54,7 +78,7 @@ class ASTFragDataset(Dataset[list[int]]):
 
 start = datetime.now()
 save_folder_name = start.strftime("%Y-%m-%dT%H:%M:.%f")
-save_folder = Path(f"out/pretraining/{save_folder_name}")
+save_folder = Path(args.output / save_folder_name)
 os.makedirs(save_folder, exist_ok=True)
 
 
@@ -125,6 +149,7 @@ num_hidden_layers = 3
 num_attention_heads = 8
 dropout = 0
 
+epochs = 100
 batch_size = 64
 
 learning_rate = 5e-5
@@ -156,7 +181,6 @@ model = RobertaForMaskedLM(config).to(device)
 
 print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 
-
 optim = torch.optim.AdamW(
     model.parameters(),
     lr=learning_rate,
@@ -165,7 +189,6 @@ optim = torch.optim.AdamW(
     betas=(0.9, 0.98),
 )
 
-EPOCHS = 50
 steps = 0
 train_losses = []
 val_losses = []
@@ -194,7 +217,7 @@ def evaluate(model: RobertaForMaskedLM, val_loader: DataLoader[list[int]]):
     return total_loss / len(val_loader)
 
 
-for epoch in (pbar := tqdm.trange(EPOCHS)):
+for epoch in (pbar := tqdm.trange(epochs)):
     model.train()
     epoch_loss = 0
     per_batch_loss = []

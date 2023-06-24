@@ -1,10 +1,7 @@
 import copy
-from enum import IntEnum
 import logging
-import os
 from pathlib import Path
 import pickle
-import random
 import time
 from typing import Any, Optional
 
@@ -16,8 +13,7 @@ from js_ast.nodes import Node
 import numpy as np
 from rl.fuzzing_action import FuzzingAction
 from rl.program_state import ProgramState
-from rl.tokenizer import ASTTokenizer
-import torch
+from transformer.tokenizer import ASTTokenizer
 
 from utils.js_engine import Coverage
 from utils.js_engine import Engine
@@ -29,7 +25,7 @@ MAX_STATEMENTS = 1000
 MAX_FRAGMENT_SEQ_LEN = 512  # Maximum length of the AST fragment sequence
 
 
-class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
+class FuzzingEnv(gym.Env[tuple[list[int], list[int]], np.int64]):
     metadata = {}
 
     def __init__(
@@ -40,7 +36,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         total_coverage: Coverage,
         tokenizer: ASTTokenizer,
         interesting_folder: Path,
-        max_mutations: int = 25,
+        max_mutations: int = 50,
         penalty_statements: int = PENALTY_STATEMENTS,
         max_statements: int = MAX_STATEMENTS,
         max_eps_without_coverage_increase: int = 500,
@@ -75,7 +71,6 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         self.engine = engine
 
         self.interesting_folder = interesting_folder
-        os.makedirs(self.interesting_folder, exist_ok=True)
 
         self._state: ProgramState
         self._state_idx: int
@@ -124,7 +119,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         ) as f:
             f.write(exec_data.out)
 
-    def _get_obs(self) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get_obs(self) -> tuple[list[int], list[int]]:
         tokenized_target = self.tokenizer.tokenize(self._state.get_target_node())
         tokenized_context = self.tokenizer.tokenize(self._state.get_context_node())
 
@@ -134,7 +129,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         return {}
 
     def _get_reward(self, exec_data: Optional[ExecutionData] = None) -> float:
-        num_statements = count_statements(self._state.program)
+        num_statements = count_statements(self._state.root)
         penalty = min(0, 1 - num_statements / self.penalty_statements)
 
         if exec_data is None:
@@ -186,7 +181,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         return exec_data is not None and exec_data.is_crash()
 
     def _get_truncated(self) -> bool:
-        num_statements = count_statements(self._state.program)
+        num_statements = count_statements(self._state.root)
         return (
             self.num_mutations >= self.max_mutations
             or num_statements >= self.max_statements
@@ -197,7 +192,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], dict[str, Any]]:
+    ) -> tuple[tuple[list[int], list[int]], dict[str, Any]]:
         # We need the following line to seed self.np_random
         super().reset(seed=seed, options=options)
         if hasattr(self, "_state"):
@@ -224,7 +219,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
         self._state_idx = self.np_random.choice(len(self.corpus))
         self._state = copy.deepcopy(self.corpus[self._state_idx])
 
-        scope_analysis(self._state.program)
+        scope_analysis(self._state.root)
 
         # Initialise state as random child of the root node
         self._state.move_down()
@@ -241,7 +236,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
     def step(
         self, action: np.int64
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
+    ) -> tuple[tuple[list[int], list[int]], float, bool, bool, dict[str, Any]]:
         logging.info(
             f"Number of mutations: {self.num_mutations}, action: {FuzzingAction(action)}"
         )
@@ -320,7 +315,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
     def _move(
         self, action: FuzzingAction
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
+    ) -> tuple[tuple[list[int], list[int]], float, bool, bool, dict[str, Any]]:
         match (action):
             case FuzzingAction.MOVE_UP:
                 moved = self._state.move_up()
@@ -346,7 +341,7 @@ class FuzzingEnv(gym.Env[tuple[torch.Tensor, torch.Tensor], np.int64]):
 
     def _end(
         self,
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], float, bool, bool, dict[str, Any]]:
+    ) -> tuple[tuple[list[int], list[int]], float, bool, bool, dict[str, Any]]:
         return (
             self._get_obs(),
             0 if self.total_coverage_increased else -2,

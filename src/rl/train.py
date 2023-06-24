@@ -9,11 +9,11 @@ from rl.dqn import BatchTransition
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
 import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
+from transformer.tokenizer import ASTTokenizer
 
 
 NUM_TRAINING_STEPS = 800000  # Number of episodes to train the agent for

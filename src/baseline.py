@@ -11,9 +11,9 @@ import traceback
 
 import numpy as np
 from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
 from rl.train import NUM_TRAINING_STEPS
 import torch
+from transformer.tokenizer import ASTTokenizer
 
 from utils.js_engine import V8Engine
 from utils.logging import setup_logging

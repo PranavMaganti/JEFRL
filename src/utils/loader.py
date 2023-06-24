@@ -42,47 +42,47 @@ def load_raw_corpus(corpus_path: Path) -> list[Node]:
 
 # Loads corpus, skipping files that do not increase the coverage
 def load_corpus(
-    engine: Engine, corpus_path: Optional[Path] = None
+    engine: Engine, corpus_path: Path, corpus_folders: list[dict[str, str]]
 ) -> list[ProgramState]:
-    if not corpus_path:
-        corpus_path = engine.corpus_path
-
-    files = list(corpus_path.rglob("*.js"))
-    logging.info(f"Found {len(files)} files in corpus")
     corpus: list[ProgramState] = []
 
     failed_exec = 0
     failed_parse = 0
-    # non_increasing_coverage = 0
 
-    for file in tqdm.tqdm(files, desc="Loading corpus"):
-        # print(file)
-        exec_data_path = Path(file).with_suffix(".pkl")
-        ast_path = Path(file).with_suffix(".ast")
+    for item in corpus_folders:
+        folder_path = corpus_path / item["folder_name"]
+        lib_path = Path(item["lib_path"]) if item["lib_path"] else None
 
-        with open(file, "r") as f:
-            code = f.read()
+        files = list(folder_path.rglob("*.js"))
+        logging.info(f"Found {len(files)} files in corpus folder {item['folder_name']}")
 
-        exec_data = load_exec_data(code, engine, exec_data_path)
+        for file in tqdm.tqdm(files, desc="Loading corpus"):
+            # print(file)
+            exec_data_path = Path(file).with_suffix(".pkl")
+            ast_path = Path(file).with_suffix(".ast")
 
-        if exec_data is None or exec_data.error != JSError.NoError:
-            logging.warning(f"Failed to execute {file} or produced an error")
-            failed_exec += 1
-            continue
+            with open(file, "r") as f:
+                code = f.read()
 
-        ast = load_ast(code, file, ast_path)
+            exec_data = load_exec_data(code, engine, exec_data_path)
 
-        if ast is None:
-            logging.warning(f"Failed to parse {file} when converting to ast")
-            failed_parse += 1
-            continue
+            if exec_data is None or exec_data.error != JSError.NoError:
+                logging.warning(f"Failed to execute {file} or produced an error")
+                failed_exec += 1
+                continue
 
-        corpus.append(ProgramState(ast, exec_data))
+            ast = load_ast(code, file, ast_path)
+
+            if ast is None:
+                logging.warning(f"Failed to parse {file} when converting to ast")
+                failed_parse += 1
+                continue
+
+            corpus.append(ProgramState(ast, exec_data, lib_path))
 
     logging.info(f"Failed to execute {failed_exec} files")
     logging.info(f"Failed to parse {failed_parse} files")
-
-    logging.info(f"Loaded {len(corpus)}/{len(files)} files from corpus")
+    logging.info(f"Loaded {len(corpus)} files from corpus")
 
     return corpus
 

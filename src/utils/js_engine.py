@@ -126,20 +126,19 @@ class ExecutionData:
 
 
 class Engine(ABC):
-    def __init__(self, base_path: Path = Path("."), version: str = "latest") -> None:
-        self.base_path = base_path
-        with open(self.corpus_lib_path, "r") as f:
-            self.lib = f.read()
-        self.version = version
-
-        if not self.executable.exists():
+    def __init__(self, executable: Path) -> None:
+        if not executable.exists():
             raise FileNotFoundError(f"Executable not found: {self.executable}")
 
+        self.executable = executable
+
     @staticmethod
-    def get_engine(name: str, version: str):
+    def get_engine(name: str, executable: Path) -> Engine:
         match name:
             case "v8":
-                return V8Engine(version=version)
+                return V8Engine(executable)
+
+        raise ValueError(f"Unknown engine: {name}")
 
     @property
     @abstractmethod
@@ -148,27 +147,15 @@ class Engine(ABC):
 
     @property
     @abstractmethod
-    def executable(self) -> Path:
-        pass
-
-    @property
-    @abstractmethod
     def args(self) -> list[str]:
         pass
 
-    @property
-    @abstractmethod
-    def corpus_path(self) -> Path:
-        pass
-
-    @property
-    @abstractmethod
-    def corpus_lib_path(self) -> Path:
-        pass
-
-    def execute_text(self, code: str) -> Optional[ExecutionData]:
+    def execute_text(
+        self, code: str, lib_path: Optional[Path] = None
+    ) -> Optional[ExecutionData]:
         tmp = tempfile.NamedTemporaryFile(delete=True)
-        tmp.write(self.lib.encode("utf-8"))
+        if lib_path:
+            tmp.write(f"load('{lib_path}')\n".encode("utf-8"))
         tmp.write(code.encode("utf-8"))
         tmp.flush()
 
@@ -209,7 +196,7 @@ class Engine(ABC):
                 error = JSError.Other
         except subprocess.TimeoutExpired:
             error = JSError.TimeoutError
-            logging.info("Timeout")
+            logging.debug("Timeout")
 
         data = ShmData.from_buffer(shm.buf)
 
@@ -247,15 +234,3 @@ class V8Engine(Engine):
             "--future",
             "--harmony",
         ]
-
-    @property
-    def executable(self) -> Path:
-        return self.base_path / ENGINES_DIR / f"v8/v8/out/fuzzbuild-{self.version}/d8"
-
-    @property
-    def corpus_path(self) -> Path:
-        return self.base_path / CORPUS_DIR / "v8-2020"
-
-    @property
-    def corpus_lib_path(self) -> Path:
-        return self.base_path / CORPUS_DIR / "libs/v8.js"

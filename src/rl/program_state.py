@@ -1,5 +1,6 @@
 from collections import deque
 import copy
+from pathlib import Path
 import random
 from typing import Any, Optional
 
@@ -19,8 +20,9 @@ from utils.js_engine import ExecutionData
 
 class ProgramState:
     __slots__ = [
+        "lib_path",
         "original_program",
-        "program",
+        "root",
         "exec_data",
         "target_node",
         "context_node",
@@ -28,11 +30,14 @@ class ProgramState:
         "num_mutation_episodes",
     ]
 
-    def __init__(self, program: Node, exec_data: ExecutionData):
-        self.original_program = copy.deepcopy(program)
-        self.program = program
-        # self.coverage = coverage
+    def __init__(
+        self, program: Node, exec_data: ExecutionData, lib_path: Optional[Path] = None
+    ):
+        self.lib_path = lib_path
         self.exec_data = exec_data
+
+        self.original_program = copy.deepcopy(program)
+        self.root = program
         self.target_node: Node = program
         self.context_node: deque[Node] = deque([program])
 
@@ -99,15 +104,15 @@ class ProgramState:
 
     def replace(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REPLACE)
-        return replace(subtrees, self.target_node, self.program)
+        return replace(subtrees, self.target_node, self.root)
 
     def add(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.ADD)
-        return add(subtrees, self.target_node, self.program)
+        return add(subtrees, self.target_node, self.root)
 
     def remove(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REMOVE)
-        return remove(subtrees, self.target_node, self.program)
+        return remove(subtrees, self.target_node, self.root)
 
     def modify(self) -> bool:
         self.action_history.append(FuzzingAction.MODIFY)
@@ -120,15 +125,16 @@ class ProgramState:
         return self.context_node[-1]
 
     def generate_program_code(self) -> Optional[str]:
-        return self.program.generate_code()
+        return self.root.generate_code()
 
     def __str__(self):
         return self.__repr__()
 
     def __deepcopy__(self, _memo: dict[int, Any]):
         return self.__class__(
-            copy.deepcopy(self.program, _memo),
+            copy.deepcopy(self.root, _memo),
             self.exec_data,
+            self.lib_path,
         )
 
 

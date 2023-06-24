@@ -30,7 +30,7 @@ def filter_corpus_by_length(
     filtered_corpus: list[ProgramState] = []
 
     for state in tqdm.tqdm(corpus, desc="Filtering corpus by length"):
-        if count_statements(state.program) <= max_statements:
+        if count_statements(state.root) <= max_statements:
             filtered_corpus.append(state)
 
     return filtered_corpus

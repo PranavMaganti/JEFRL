@@ -1,26 +1,26 @@
 [
-  {
-    "folder_name": "ChakraCore",
-    "lib_path": "corpus/libs/chakracore.js" 
-  },
-  {
-    "folder_name": "firefox",
-    "lib_path": "corpus/libs/chakracore.js"
-  },
-  {
-    "folder_name": "jit",
-    "lib_path": null
-  },
-  {
-    "folder_name": "js_vuln_db",
-    "lib_path": null
-  },
-  {
-    "folder_name": "jsc",
-    "lib_path": "corpus/libs/javascriptcore.js"
-  },
-  {
-    "folder_name": "v8",
-    "lib_path": "corpus/libs/v8.js"
-  }
+    {
+        "folder_name": "ChakraCore",
+        "lib_path": "corpus/libs/chakracore.js"
+    },
+    {
+        "folder_name": "firefox",
+        "lib_path": "corpus/libs/chakracore.js"
+    },
+    {
+        "folder_name": "jit",
+        "lib_path": null
+    },
+    {
+        "folder_name": "js-vuln-db",
+        "lib_path": null
+    },
+    {
+        "folder_name": "jsc",
+        "lib_path": "corpus/libs/javascriptcore.js"
+    },
+    {
+        "folder_name": "v8",
+        "lib_path": "corpus/libs/v8.js"
+    }
 ]

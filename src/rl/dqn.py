@@ -1,42 +1,38 @@
 from collections import deque
 import random
-from typing import NamedTuple, Optional
+from typing import Generic, NamedTuple, Optional, TypeVar
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 
-Transition = NamedTuple(
-    "Transition",
-    [
-        ("state", torch.Tensor),
-        ("action", torch.Tensor),
-        ("next_state", Optional[torch.Tensor]),
-        ("reward", torch.Tensor),
-    ],
-)
-
-BatchTransition = NamedTuple(
-    "BatchTransition",
-    [
-        ("states", tuple[torch.Tensor]),
-        ("actions", tuple[torch.Tensor]),
-        ("next_states", tuple[Optional[torch.Tensor]]),
-        ("rewards", tuple[torch.Tensor]),
-    ],
-)
+T = TypeVar("T")
 
 
-class ReplayMemory:
+class Transition(NamedTuple, Generic[T]):
+    state: T
+    action: torch.Tensor
+    next_state: Optional[T]
+    reward: torch.Tensor
+
+
+class BatchTransition(NamedTuple, Generic[T]):
+    states: tuple[T]
+    actions: tuple[torch.Tensor]
+    next_states: tuple[Optional[T]]
+    rewards: tuple[torch.Tensor]
+
+
+class ReplayMemory(Generic[T]):
     def __init__(self, capacity: int):
         self.memory: deque[Transition] = deque([], maxlen=capacity)
 
     def push(
         self,
-        state: torch.Tensor,
+        state: T,
         action: torch.Tensor,
-        next_state: Optional[torch.Tensor],
+        next_state: Optional[T],
         reward: torch.Tensor,
     ):
         """Save a transition"""

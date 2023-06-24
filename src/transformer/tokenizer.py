@@ -1,17 +1,14 @@
 from datetime import datetime
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 from js_ast.fragmentise import hash_frag
 from js_ast.fragmentise import node_to_frags
 from js_ast.nodes import Node
 import torch
-
-
-PAD_TOKEN = "<pad>"
-CLS_TOKEN = "<s>"
-SEP_TOKEN = "</s>"
-MASK_TOKEN = "<mask>"
-UNK_TOKEN = "<unk>"
+from transformer.special_tokens import CLS_TOKEN
+from transformer.special_tokens import PAD_TOKEN
+from transformer.special_tokens import SEP_TOKEN
+from transformer.special_tokens import UNK_TOKEN
 
 
 class ASTTokenizer:
@@ -19,20 +16,20 @@ class ASTTokenizer:
         self,
         vocab: set[str],
         token_to_id: dict[str, int],
-        max_len: int,
-        device: torch.device,
+        max_len: Optional[int] = None,
     ):
         self.vocab = vocab
         self.token_to_id = token_to_id
         self.max_len = max_len
-        self.device = device
 
-    def tokenize(self, ast: Node) -> torch.Tensor:
+    def tokenize(self, ast: Node) -> list[int]:
         frag_seq: list[dict[str, Any]] = []
         node_types: set[str] = set()
-
         node_to_frags(ast, frag_seq, node_types, max_len=self.max_len)
 
+        return self.frag_seq_to_ids(frag_seq)
+
+    def frag_seq_to_ids(self, frag_seq: list[dict[str, Any]]) -> list[int]:
         frag_id_seq: list[int] = []
         frag_id_seq.append(self.token_to_id[CLS_TOKEN])
 
@@ -49,16 +46,18 @@ class ASTTokenizer:
                     print(f"UNK_TOKEN: {frag_hash}")
                     frag_id_seq.append(self.token_to_id[UNK_TOKEN])
 
-        if len(frag_id_seq) < self.max_len:
+        if self.max_len is None or len(frag_id_seq) < self.max_len:
             frag_id_seq.append(self.token_to_id[SEP_TOKEN])
 
-        return torch.tensor(frag_id_seq, dtype=torch.long)
+        return frag_id_seq
 
-    def pad_batch(self, batch: Iterable[torch.Tensor]) -> dict[str, torch.Tensor]:
+    def pad_batch(
+        self, batch: list[torch.Tensor], device: torch.device
+    ) -> dict[str, torch.Tensor]:
         inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True).to(
-            self.device
+            device
         )
-        attention_mask = torch.ones_like(inputs, device=self.device)
+        attention_mask = torch.ones_like(inputs, device=device)
         attention_mask[inputs == self.token_to_id[PAD_TOKEN]] = 0
 
         return {

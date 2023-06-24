@@ -9,10 +9,10 @@ from rl.dqn import BatchTransition
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
 from rl.env import FuzzingEnv
-from rl.tokenizer import ASTTokenizer
 import torch
 from torch import optim
 import torch.nn as nn
+from transformer.tokenizer import ASTTokenizer
 from transformers import RobertaModel
 
 
