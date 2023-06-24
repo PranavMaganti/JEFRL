@@ -42,7 +42,7 @@ def get_frag_counts(frag_seqs: list[list[dict[str, Any]]]):
 def get_vocab(
     frag_counts: dict[str, int],
     node_types: set[str],
-    min_count: int = 4,
+    min_count: int = 3,
 ):
     frag_freq_list = list(sorted(frag_counts.items(), reverse=True, key=lambda x: x[1]))
     oov_frags: list[str] = []
@@ -54,7 +54,7 @@ def get_vocab(
         oov_frags.append(oov_frag_hash)
 
     threshold_frags = [
-        frag_hash for frag_hash, freq in frag_freq_list if freq > min_count
+        frag_hash for frag_hash, freq in frag_freq_list if freq >= min_count
     ]
     vocab_frags = set(threshold_frags + oov_frags)
 

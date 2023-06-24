@@ -39,9 +39,10 @@ def get_state_embedding(
     state: list[tuple[torch.Tensor, torch.Tensor]],
     ast_net: RobertaModel,
     tokenizer: ASTTokenizer,
+    device: torch.device,
 ) -> torch.Tensor:
     flattened_state = [item for sublist in state for item in sublist]
-    batch = tokenizer.pad_batch(flattened_state)
+    batch = tokenizer.pad_batch(flattened_state, device)
     state_embedding = ast_net(**batch).pooler_output.view(len(state), -1)
     return state_embedding
 
@@ -63,14 +64,16 @@ def epsilon_greedy(
         # Sample action from model depending of state
         with torch.no_grad():
             # Get the code snippet embedding
-            values = policy_net(get_state_embedding([state], ast_net, tokenizer))
+            values = policy_net(
+                get_state_embedding([state], ast_net, tokenizer, device)
+            )
             logging.debug(f"Q-values: {values}")
             return values.argmax().view(1, 1)
 
     logging.debug(f"Random action selected, epsilon = {eps_threshold}")
     # Sample random action
     return torch.tensor(
-        [env.action_space.sample()],
+        [[env.action_space.sample()]],
         device=device,
         dtype=torch.long,
     )
@@ -120,13 +123,17 @@ def optimise_model(
     action_batch = torch.cat(batch.actions)
     reward_batch = torch.cat(batch.rewards)
 
-    states_batch_embedded = get_state_embedding(batch.states, ast_net, tokenizer)
+    states_batch_embedded = get_state_embedding(
+        batch.states, ast_net, tokenizer, device
+    )
 
+    print(states_batch_embedded.shape)
+    print(action_batch.shape)
     state_action_values = policy_net(states_batch_embedded).gather(1, action_batch)
     next_state_values = torch.zeros(batch_size, device=device)
     with torch.no_grad():
         next_states_batch_embedded = get_state_embedding(
-            non_final_next_states, ast_net, tokenizer
+            non_final_next_states, ast_net, tokenizer, device
         )
         next_state_values[non_final_mask] = (
             target_net(next_states_batch_embedded)

@@ -8,9 +8,9 @@ from transformers import RobertaModel
 
 
 intermediate_size = 2048  # embedding dimension
-hidden_size = 512
+hidden_size = 768
 
-num_hidden_layers = 3
+num_hidden_layers = 4
 num_attention_heads = 8
 dropout = 0
 

@@ -46,8 +46,8 @@ print("Loading data...")
 with open(args.data_dir / "vocab_data.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
-with open(args.data_dir / "pretraining_data.pkl", "rb") as f:
-    data = pickle.load(f)
+with open(args.data_dir / "frag_data.pkl", "rb") as f:
+    frag_data = pickle.load(f)
 
 
 MAX_SEQ_LEN = 512
@@ -63,6 +63,9 @@ special_tokens = [PAD_TOKEN, CLS_TOKEN, MASK_TOKEN, SEP_TOKEN, UNK_TOKEN]
 
 token_to_id = vocab_data["token_to_id"]
 vocab = vocab_data["vocab"]
+
+frag_seqs = frag_data["frag_data"]
+node_types = frag_data["node_types"]
 
 
 class ASTFragDataset(Dataset[list[int]]):
@@ -146,8 +149,7 @@ batch_size = 64
 
 learning_rate = 5e-5
 
-
-dataset = ASTFragDataset(data)
+dataset = ASTFragDataset(frag_seqs)
 train_split, val_split, test_split = random_split(dataset, [0.8, 0.1, 0.1])
 
 train_loader = DataLoader(
@@ -163,6 +165,7 @@ test_loader = DataLoader(
 config = get_ast_transformer_config(len(vocab))
 model = RobertaForMaskedLM(config).to(device)
 
+print(model)
 print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 
 optim = torch.optim.AdamW(

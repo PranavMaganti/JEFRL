@@ -85,7 +85,7 @@ if not args.data_dir.exists():
 if not args.pretraining_path.exists():
     raise ValueError(f"Pretraining path {args.pretraining_path} does not exist")
 
-pretrained_model_path = args.pretraining_path / f"model-{args.pretraining_step}.pt"
+pretrained_model_path = args.pretraining_path / f"model_{args.pretraining_step}.pt"
 
 if not pretrained_model_path.exists():
     raise ValueError(f"Pretraining model {pretrained_model_path} does not exist")
@@ -159,6 +159,13 @@ os.makedirs(data_folder, exist_ok=True)
 
 interesting_tests_folder = data_folder / "interesting"
 training_folder = data_folder / "training"
+models_folder = training_folder / "models"
+run_data_folder = data_folder / "run_data"
+
+os.makedirs(interesting_tests_folder, exist_ok=True)
+os.makedirs(training_folder, exist_ok=True)
+os.makedirs(models_folder, exist_ok=True)
+os.makedirs(run_data_folder, exist_ok=True)
 
 
 logging.info("Setting up environment")
@@ -284,7 +291,7 @@ while total_steps < NUM_TRAINING_STEPS:
             current_coverage = env.total_coverage.coverage()
             total_executions = env.total_executions
 
-            with open(training_folder / f"run_data/{total_steps}.pkl", "wb") as f:
+            with open(run_data_folder / f"{total_steps}.pkl", "wb") as f:
                 pickle.dump(
                     {
                         "episode_actions": episode_actions,
@@ -303,15 +310,15 @@ while total_steps < NUM_TRAINING_STEPS:
         if total_steps % 5000 == 0:
             torch.save(
                 policy_net.state_dict(),
-                training_folder / f"models/policy_net_{total_steps}.pt",
+                models_folder / f"policy_net_{total_steps}.pt",
             )
             torch.save(
                 target_net.state_dict(),
-                training_folder / f"models/target_net_{total_steps}.pt",
+                models_folder / f"target_net_{total_steps}.pt",
             )
             torch.save(
                 ast_net.state_dict(),
-                training_folder / f"models/ast_net_{total_steps}.pt",
+                models_folder / f"ast_net_{total_steps}.pt",
             )
 
         ep_end = datetime.now()
