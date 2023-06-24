@@ -2,7 +2,6 @@ from collections import deque
 import random
 from typing import Generic, NamedTuple, Optional, TypeVar
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 

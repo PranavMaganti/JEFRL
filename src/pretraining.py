@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.utils.data import random_split
 import tqdm
-from transformers import RobertaConfig
+from transformer.ast_transformer import get_ast_transformer_config
 from transformers import RobertaForMaskedLM
 
 
@@ -43,7 +43,7 @@ if not args.output.exists():
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print("Loading data...")
-with open(args.data_dir / "/ocab_data.pkl", "rb") as f:
+with open(args.data_dir / "vocab_data.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
 with open(args.data_dir / "pretraining_data.pkl", "rb") as f:
@@ -141,14 +141,6 @@ def seq_data_collator(batch: list[list[int]]) -> dict[str, torch.Tensor]:
     }
 
 
-vocab_size = len(vocab)  # size of vocabulary
-intermediate_size = 2048  # embedding dimension
-hidden_size = 512
-
-num_hidden_layers = 3
-num_attention_heads = 8
-dropout = 0
-
 epochs = 100
 batch_size = 64
 
@@ -168,15 +160,7 @@ test_loader = DataLoader(
     test_split, batch_size=batch_size, shuffle=True, collate_fn=seq_data_collator
 )
 
-config = RobertaConfig(
-    vocab_size=vocab_size,
-    hidden_size=hidden_size,
-    num_hidden_layers=num_hidden_layers,
-    num_attention_heads=num_attention_heads,
-    intermediate_size=intermediate_size,
-    hidden_dropout_prob=dropout,
-    max_position_embeddings=MAX_SEQ_LEN + 2,
-)
+config = get_ast_transformer_config(len(vocab))
 model = RobertaForMaskedLM(config).to(device)
 
 print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
@@ -200,7 +184,7 @@ with open(save_folder / "hyperparameters.json", "w") as f:
                 "test_split": list(test_split.indices),
                 "val_split": list(val_split.indices),
                 "LR": learning_rate,
-                "dropout": dropout,
+                "dropout": config.hidden_dropout_prob,
             }
         )
     )
