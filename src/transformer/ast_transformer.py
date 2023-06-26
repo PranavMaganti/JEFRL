@@ -8,9 +8,9 @@ from transformers import RobertaModel
 
 
 intermediate_size = 2048  # embedding dimension
-hidden_size = 768
+hidden_size = 512
 
-num_hidden_layers = 4
+num_hidden_layers = 3
 num_attention_heads = 8
 dropout = 0
 
@@ -46,10 +46,9 @@ def get_ast_transformer_model(
     # Load the ASTBERTa model
     tokenizer = ASTTokenizer(vocab, token_to_id, MAX_FRAGMENT_SEQ_LEN)
 
-    pretrained_model = torch.load(pretrained_model_path)
     ast_net = RobertaModel.from_pretrained(
         pretrained_model_name_or_path=None,
-        state_dict=pretrained_model.state_dict(),
+        state_dict=torch.load(pretrained_model_path),
         config=config,
     ).to(device)
 

@@ -1,6 +1,6 @@
 [
-  {
-    "folder_name": null,
-    "lib_path": null
-  }
+    {
+        "folder_name": ".",
+        "lib_path": null
+    }
 ]

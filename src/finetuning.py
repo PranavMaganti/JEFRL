@@ -67,7 +67,7 @@ parser.add_argument(
     "--data-dir",
     type=Path,
     default=Path("data/"),
-    help="The path to which the vocabulary and pretraining data will be saved",
+    help="The path to which the vocabulary and pretraining data was saved",
 )
 parser.add_argument(
     "--output",
@@ -160,7 +160,7 @@ os.makedirs(data_folder, exist_ok=True)
 interesting_tests_folder = data_folder / "interesting"
 training_folder = data_folder / "training"
 models_folder = training_folder / "models"
-run_data_folder = data_folder / "run_data"
+run_data_folder = training_folder / "run_data"
 
 os.makedirs(interesting_tests_folder, exist_ok=True)
 os.makedirs(training_folder, exist_ok=True)

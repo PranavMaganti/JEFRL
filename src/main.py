@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import pickle
 import random
+import shutil
 import sys
 import traceback
 from turtle import setup
@@ -26,6 +27,7 @@ from rl.train import EPS_END
 from rl.train import EPS_START
 from rl.train import epsilon_greedy
 from rl.train import GAMMA
+from rl.train import get_state_embedding
 from rl.train import GRADIENT_CLIP
 from rl.train import LR
 from rl.train import MAX_MUTATIONS
@@ -41,7 +43,6 @@ from torch import optim
 from transformer.ast_transformer import get_ast_transformer_model
 from transformer.tokenizer import ASTTokenizer
 from transformers import get_linear_schedule_with_warmup
-from transformers import RobertaConfig
 from transformers import RobertaModel
 
 from utils.js_engine import Engine
@@ -86,11 +87,11 @@ if not args.data_dir.exists():
     raise ValueError(f"Data directory {args.data_dir} does not exist")
 
 finetuned_model_path = (
-    args.finetuning_path / f"models/ast_net_{args.finetuning_step}.pt"
+    args.finetuning_path / f"training/models/ast_net_{args.finetuning_step}.pt"
 )
 
-if not args.finetuned_model_path.exists():
-    raise ValueError(f"Finetuned model path {args.finetuned_model_path} does not exist")
+if not finetuned_model_path.exists():
+    raise ValueError(f"Finetuned model path {finetuned_model_path} does not exist")
 
 if not args.finetuning_path.is_dir():
     raise ValueError(f"Finetuning path {args.finetuning_path} is not a directory")
@@ -173,6 +174,15 @@ os.makedirs(data_folder, exist_ok=True)
 
 interesting_tests_folder = data_folder / "interesting"
 training_folder = data_folder / "training"
+models_folder = training_folder / "models"
+run_data_folder = training_folder / "run_data"
+
+os.makedirs(interesting_tests_folder, exist_ok=True)
+os.makedirs(training_folder, exist_ok=True)
+os.makedirs(models_folder, exist_ok=True)
+os.makedirs(run_data_folder, exist_ok=True)
+
+shutil.copyfile(finetuned_model_path, models_folder / "ast_net.pt")
 
 logging.info("Setting up environment")
 engine = Engine.get_engine(args.engine_name, args.engine_executable)
@@ -225,24 +235,6 @@ episode_actions: list[list[tuple[int, str]]] = []
 
 optimization_times: list[float] = []
 losses: list[float] = []
-
-
-def get_state_embedding(
-    state: tuple[list[int], list[int]],
-    ast_net: RobertaModel,
-    tokenizer: ASTTokenizer,
-    device: torch.device,
-) -> torch.Tensor:
-    state_tensor = [
-        torch.tensor(state[0], dtype=torch.long, device=device),
-        torch.tensor(state[1], dtype=torch.long, device=device),
-    ]
-
-    batch = tokenizer.pad_batch(
-        state_tensor,
-        device=device,
-    )
-    return ast_net(**batch).pooler_output.view(1, -1)
 
 
 while total_steps < NUM_TRAINING_STEPS:
@@ -309,13 +301,14 @@ while total_steps < NUM_TRAINING_STEPS:
             current_coverage = env.total_coverage.coverage()
             total_executions = env.total_executions
 
-            with open(training_folder / f"run_data/{total_steps}.pkl", "wb") as f:
+            with open(run_data_folder / f"{total_steps}.pkl", "wb") as f:
                 pickle.dump(
                     {
                         "episode_actions": episode_actions,
                         "episode_rewards": episode_rewards,
                         "episode_coverage": episode_coverage,
                         "execution_coverage": execution_coverage,
+                        "action_coverage": action_coverage,
                         "execution_errors": env.exec_errors,
                         "current_coverage": current_coverage,
                         "total_steps": total_steps,
@@ -334,11 +327,11 @@ while total_steps < NUM_TRAINING_STEPS:
         if total_steps % 10000 == 0:
             torch.save(
                 policy_net.state_dict(),
-                training_folder / f"models/policy_net_{total_steps}.pt",
+                models_folder / f"policy_net_{total_steps}.pt",
             )
             torch.save(
                 target_net.state_dict(),
-                training_folder / f"models/target_net_{total_steps}.pt",
+                models_folder / f"target_net_{total_steps}.pt",
             )
 
         ep_end = datetime.now()

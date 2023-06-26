@@ -56,10 +56,14 @@ def get_vocab(
     threshold_frags = [
         frag_hash for frag_hash, freq in frag_freq_list if freq >= min_count
     ]
+    threshold_frags = threshold_frags[: 20000 - len(oov_frags)]
+
     vocab_frags = set(threshold_frags + oov_frags)
 
     ordered_vocab = special_tokens + list(vocab_frags)
     vocab = set(ordered_vocab)
+
+    print(len(vocab))
 
     token_to_id = {token: i for i, token in enumerate(ordered_vocab)}
     id_to_token = {i: token for token, i in token_to_id.items()}

@@ -14,6 +14,7 @@ from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
 from transformer.tokenizer import ASTTokenizer
+from transformers import RobertaModel
 
 
 NUM_TRAINING_STEPS = 800000  # Number of episodes to train the agent for
@@ -30,6 +31,24 @@ TAU = 1  # Update rate of the target network
 TARGET_UPDATE = 1000  # Number of steps after which the target network is updated
 GRADIENT_CLIP = 1  # Maximum value of the gradient during backpropagation
 WARM_UP_STEPS = 50000  # Number of steps before training begins
+
+
+def get_state_embedding(
+    state: tuple[list[int], list[int]],
+    ast_net: RobertaModel,
+    tokenizer: ASTTokenizer,
+    device: torch.device,
+) -> torch.Tensor:
+    state_tensor = [
+        torch.tensor(state[0], dtype=torch.long, device=device),
+        torch.tensor(state[1], dtype=torch.long, device=device),
+    ]
+
+    batch = tokenizer.pad_batch(
+        state_tensor,
+        device=device,
+    )
+    return ast_net(**batch).pooler_output.view(1, -1)
 
 
 # Select action based on epsilon-greedy policy
@@ -54,7 +73,7 @@ def epsilon_greedy(
     logging.debug(f"Random action selected, epsilon = {eps_threshold}")
     # Sample random action
     return torch.tensor(
-        [env.action_space.n.sample()],
+        [[env.action_space.sample()]],
         device=device,
         dtype=torch.long,
     )

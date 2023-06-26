@@ -35,7 +35,7 @@ class FuzzingEnv(gym.Env[tuple[list[int], list[int]], np.int64]):
         engine: Engine,
         total_coverage: Coverage,
         tokenizer: ASTTokenizer,
-        interesting_folder: Path,
+        interesting_folder: Optional[Path] = None,
         max_mutations: int = 50,
         penalty_statements: int = PENALTY_STATEMENTS,
         max_statements: int = MAX_STATEMENTS,
@@ -100,6 +100,9 @@ class FuzzingEnv(gym.Env[tuple[list[int], list[int]], np.int64]):
         self.code_gen_times = []
 
     def save_current_state(self, save_type: str, exec_data: ExecutionData) -> None:
+        if self.interesting_folder is None:
+            return
+
         current_time = int(time.time())
 
         code = self._state.generate_program_code()

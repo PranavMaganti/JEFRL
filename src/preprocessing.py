@@ -39,19 +39,19 @@ parser.add_argument(
 )
 parser.add_argument(
     "--corpus",
-    type=str,
+    type=Path,
     default=Path("corpus/DIE"),
     help="The path to the corpus to preprocess",
 )
 parser.add_argument(
     "--corpus-config",
-    type=str,
+    type=Path,
     default=Path("corpus/configs/DIE.json"),
     help="The path to the corpus config file",
 )
 parser.add_argument(
     "--output",
-    type=str,
+    type=Path,
     default=Path("data/"),
     help="The path to the output directory where processed files will be stored",
 )
@@ -90,8 +90,6 @@ for state in tqdm(corpus, desc="Normalising corpus"):
 
 # Get subtrees before length filtering as we can still use subtrees from long programs
 subtrees = get_subtrees(corpus)
-corpus = filter_corpus_by_length(corpus)
-
 
 # Get data for pre-training AST Transformer
 frag_seqs, node_types = get_frag_data(corpus)
@@ -101,6 +99,7 @@ vocab, token_to_id, id_to_token, special_token_ids = get_vocab(frag_counts, node
 tokenizer = ASTTokenizer(vocab, token_to_id)
 frag_data = [tokenizer.frag_seq_to_ids(frag_seq) for frag_seq in frag_seqs]
 
+corpus = filter_corpus_by_length(corpus)
 corpus, total_coverage = filter_corpus_by_coverage(corpus)
 
 for state in tqdm(corpus, desc="Analysing corpus"):
@@ -113,7 +112,6 @@ with open(args.output / "corpus.pkl", "wb") as f:
         {"corpus": corpus, "subtrees": subtrees, "total_coverage": total_coverage}, f
     )
 
-
 with open(args.output / "vocab_data.pkl", "wb") as f:
     pickle.dump(
         {
@@ -124,7 +122,6 @@ with open(args.output / "vocab_data.pkl", "wb") as f:
         },
         f,
     )
-
 
 with open(args.output / "frag_data.pkl", "wb") as f:
     pickle.dump({"frag_data": frag_data, "node_types": node_types}, f)
