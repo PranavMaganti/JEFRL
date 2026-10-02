@@ -1,11 +1,9 @@
 from collections import defaultdict
-from platform import node
 from typing import Any
 
 from js_ast.fragmentise import hash_frag
 from js_ast.fragmentise import node_to_frags
 from rl.program_state import ProgramState
-from traitlets import default
 from transformer.special_tokens import CLS_TOKEN
 from transformer.special_tokens import PAD_TOKEN
 from transformer.special_tokens import SEP_TOKEN

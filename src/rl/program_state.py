@@ -1,13 +1,19 @@
 from collections import deque
 import copy
+import logging
 from pathlib import Path
 import random
 from typing import Any, Optional
 
 from js_ast.mutation import add
+from js_ast.mutation import can_add
+from js_ast.mutation import can_modify
+from js_ast.mutation import can_remove
+from js_ast.mutation import can_replace
 from js_ast.mutation import modify
 from js_ast.mutation import remove
 from js_ast.mutation import replace
+from js_ast.natives import decode_natives
 from js_ast.nodes import BlockStatement
 from js_ast.nodes import ClassBody
 from js_ast.nodes import FunctionDeclaration
@@ -21,7 +27,6 @@ from utils.js_engine import ExecutionData
 class ProgramState:
     __slots__ = [
         "lib_path",
-        "original_program",
         "root",
         "exec_data",
         "target_node",
@@ -36,7 +41,6 @@ class ProgramState:
         self.lib_path = lib_path
         self.exec_data = exec_data
 
-        self.original_program = copy.deepcopy(program)
         self.root = program
         self.target_node: Node = program
         self.context_node: deque[Node] = deque([program])
@@ -84,7 +88,9 @@ class ProgramState:
                 self.target_node = parent_children[(i - 1) % len(parent_children)]
                 return True
 
-        raise Exception("Could not move left in parent. This should not happen.")
+        # The target isn't among its parent's children (a stale parent link)
+        logging.debug("Could not find the target node in its parent")
+        return False
 
     def move_right(self) -> bool:
         self.action_history.append(FuzzingAction.MOVE_RIGHT)
@@ -100,7 +106,9 @@ class ProgramState:
                 self.target_node = parent_children[(i + 1) % len(parent_children)]
                 return True
 
-        raise Exception("Could not move right in parent. This should not happen.")
+        # The target isn't among its parent's children (a stale parent link)
+        logging.debug("Could not find the target node in its parent")
+        return False
 
     def replace(self, subtrees: dict[str, list[Node]]) -> tuple[Node, bool]:
         self.action_history.append(FuzzingAction.REPLACE)
@@ -125,7 +133,28 @@ class ProgramState:
         return self.context_node[-1]
 
     def generate_program_code(self) -> Optional[str]:
-        return self.root.generate_code()
+        code = self.root.generate_code()
+        return decode_natives(code) if code is not None else None
+
+    def valid_actions(self, subtrees: dict[str, list[Node]]) -> list[bool]:
+        """Which actions would succeed on the current target node, indexed by
+        FuzzingAction. Mirrors the checks made by the move and mutation methods."""
+        target = self.target_node
+        parent = target.parent
+        num_siblings = len(parent.children()) if parent is not None else 0
+
+        valid = [False] * len(FuzzingAction)
+        valid[FuzzingAction.REPLACE] = can_replace(subtrees, target)
+        valid[FuzzingAction.ADD] = can_add(subtrees, target)
+        valid[FuzzingAction.REMOVE] = can_remove(target)
+        valid[FuzzingAction.MODIFY] = can_modify(target)
+        valid[FuzzingAction.MOVE_UP] = parent is not None
+        valid[FuzzingAction.MOVE_DOWN] = len(target.children()) > 0
+        valid[FuzzingAction.MOVE_LEFT] = num_siblings > 1
+        valid[FuzzingAction.MOVE_RIGHT] = num_siblings > 1
+        valid[FuzzingAction.END] = True
+
+        return valid
 
     def __str__(self):
         return self.__repr__()

@@ -194,7 +194,13 @@ class TestScopeAnalysis:
             sourceType="script",
         )  # type: ignore
         scope_analysis(program_node)
-        assert program_node.body[0].scope.available_variables() == {"x"}
+        function = program_node.body[0]
+        # x is visible inside the function body...
+        assert function.body.scope.available_variables() == {"x"}
+        assert function.body.body[0].scope.available_variables() == {"x"}
+        # ...but must not leak into the enclosing (global) scope
+        assert "x" not in function.scope.available_variables()
+        assert "x" not in program_node.end_scope.available_variables()
 
     def test_variable_function_declaration(self):
         # Test that function parameters are in scope within the function body
@@ -283,9 +289,12 @@ class TestFixNodeReferences:
         )
         scope = Scope(functions={"bar": 1})
         node.scope = scope
+        arguments = list(node.arguments)
         fix_node_references(node, {})
         assert node.callee.name in scope.available_functions()
-        assert len(node.arguments) == 1
+        # The arguments are kept (not regenerated), so nodes inside them stay attached
+        assert node.arguments == arguments
+        assert all(a is b for a, b in zip(node.arguments, arguments))
         for child in node.traverse():
             if child.type == "Identifier" or child.type == "Literal":
                 continue
@@ -321,3 +330,127 @@ class TestFixNodeReferences:
             if child.type == "Identifier" or child.type == "Literal":
                 continue
             assert child.scope is not None
+
+
+def _fix_code(code: str) -> str:
+    """Parses code, runs one reference-fixing pass over it and generates it again."""
+    from utils.loader import parse_code
+
+    random.seed(0)
+    ast = parse_code(code, "test.js")
+    assert ast is not None
+    scope_analysis(ast)
+    fix_node_references(ast, {})
+    out = ast.generate_code()
+    assert out is not None
+    return out
+
+
+class TestFixNodeReferencesOnPrograms:
+    """Valid programs must come out of reference fixing unchanged."""
+
+    def test_builtins_are_kept(self):
+        code = """
+var v0 = 1;
+var v1 = new Array(10);
+var v2 = new ArrayBuffer(8);
+var v3 = new Proxy({}, {});
+var v4 = Math.floor(v0) + Object.keys(v1).length + Symbol.iterator.length;
+var v5 = [undefined, NaN, Infinity, JSON.stringify(v1), Reflect.ownKeys(v3)];
+"""
+        out = _fix_code(code)
+        for name in ["Array", "ArrayBuffer", "Proxy", "Math", "Object", "Symbol", "JSON", "Reflect", "undefined", "NaN"]:
+            assert name in out
+
+    def test_function_params_are_scoped_to_the_function(self):
+        out = _fix_code("var v0 = 1;\nfunction f0(x) {\n    return x;\n}\nvar v1 = v0;")
+        assert "return x;" in out
+        # x must not be used outside f0
+        assert "var v1 = v0;" in out
+
+    def test_arrow_and_function_expression_params(self):
+        code = "var v0 = [1, 2].map((a, b) => a + b);\nvar v1 = function (c) {\n    return c;\n};"
+        out = _fix_code(code)
+        assert "a + b" in out
+        assert "return c;" in out
+
+    def test_catch_param_and_property_keys(self):
+        code = "var v0 = { key: 1 };\ntry {\n    v0.key = 2;\n} catch (e) {\n    v0 = e;\n}"
+        out = _fix_code(code)
+        assert "key: 1" in out
+        assert "v0 = e;" in out
+
+    def test_functions_and_classes_used_as_values(self):
+        code = "function f0() {\n}\nclass c0 {\n}\nvar v0 = [f0, c0];\nvar v1 = new c0();"
+        out = _fix_code(code)
+        assert "[\n    f0,\n    c0\n]" in out or "[f0, c0]" in out
+        assert "new c0()" in out
+
+    def test_undeclared_variable_is_still_fixed(self):
+        out = _fix_code("var v0 = 1;\nvar v1 = notDeclared + 1;")
+        assert "notDeclared" not in out
+
+    def test_default_rest_and_destructured_params(self):
+        code = (
+            "var v0 = 1;\nfunction f0(a = v0, { b, c = a } = {}, ...d) {\n    return a + b + c + d.length;\n}\n"
+            "try {\n    f0();\n} catch ({ message }) {\n    v0 = message;\n}"
+        )
+        from utils.loader import parse_code
+
+        ast = parse_code(code, "test.js")
+        scope_analysis(ast)
+        # Every non-leaf node must have a scope, otherwise mutations can't fix references
+        for node in ast.traverse():
+            if node.type not in ("Identifier", "Literal"):
+                assert node.scope is not None, node.type
+        assert _fix_code(code) == ast.generate_code()
+
+
+def test_renaming_a_call_keeps_nodes_attached():
+    """A node inside a renamed call's arguments must stay in the tree, otherwise the
+    agent's next action on it fails ("Could not find target in parent")."""
+    from utils.loader import parse_code
+
+    random.seed(0)
+    ast = parse_code("function f0(a) {\n    return a;\n}\nunknownFn(1 + 2, [3]);", "test.js")
+    scope_analysis(ast)
+    inner = next(n for n in ast.traverse() if n.type == "Literal" and n.value == 3)
+    fix_node_references(ast, {})
+
+    assert "f0(" in ast.generate_code()
+    node = inner
+    while node.parent is not None:
+        assert any(child is node for child in node.parent.children())
+        node = node.parent
+    assert node is ast
+
+
+class TestUndeclaredReferenceFallbacks:
+    """An undeclared reference must always be renamed, even when nothing of the
+    same kind is in scope, otherwise the program throws a ReferenceError."""
+
+    def test_value_falls_back_to_a_function(self):
+        out = _fix_code("function f0() {\n}\nnotDeclared + 1;")
+        assert "f0 + 1;" in out
+
+    def test_value_falls_back_to_a_builtin(self):
+        from js_ast.analysis import FALLBACK_VALUES
+
+        out = _fix_code("notDeclared + 1;")
+        assert "notDeclared" not in out
+        assert any(f"{value} + 1;" in out for value in FALLBACK_VALUES)
+
+    def test_call_falls_back_to_a_builtin_function(self):
+        from js_ast.analysis import FALLBACK_FUNCTIONS
+
+        # Only a variable in scope: calling it would be a TypeError
+        out = _fix_code("var v0 = 1;\nnotDeclared(v0);")
+        assert any(f"{name}(v0);" in out for name in FALLBACK_FUNCTIONS)
+
+    def test_new_prefers_classes(self):
+        out = _fix_code("var v0 = 1;\nclass c0 {\n}\nnew notDeclared();")
+        assert "new c0();" in out
+
+    def test_names_missing_from_d8_are_renamed(self):
+        out = _fix_code("function f0() {\n}\nrequire('fs');\nquit();")
+        assert "require" not in out and "quit" not in out

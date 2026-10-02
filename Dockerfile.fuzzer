@@ -1,0 +1,29 @@
+# Runs the fuzzer next to the Linux x64 d8 built by engines/v8 (REPRL needs the
+# fuzzer and engine on the same machine). The AST Transformer is frozen while
+# fuzzing, so CPU PyTorch is enough; pre-train on a GPU/Apple Silicon machine.
+#
+#   docker build --platform linux/amd64 -f Dockerfile.fuzzer -t jefrl-fuzzer .
+#   docker run --rm -it --shm-size=1g -v "$PWD":/jefrl jefrl-fuzzer python3 src/main.py ...
+FROM --platform=linux/amd64 ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -yqq ca-certificates curl git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV VIRTUAL_ENV=/venv PATH=/venv/bin:$PATH
+RUN uv venv --python 3.11 /venv \
+    && uv pip install --index-url https://download.pytorch.org/whl/cpu torch \
+    && uv pip install \
+        "esprima==4.0.1" \
+        "numpy<2" \
+        tqdm \
+        "transformers>=4.40,<5" \
+        strenum \
+        "gymnasium>=0.28,<1" \
+        esutils \
+        escodegen \
+        pytest
+
+WORKDIR /jefrl

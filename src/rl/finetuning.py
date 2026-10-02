@@ -1,25 +1,25 @@
-from datetime import datetime
 import logging
-import math
 import random
-import time
+from typing import Optional
 
 import numpy as np
-from rl.dqn import BatchTransition
 from rl.dqn import DQN
 from rl.dqn import ReplayMemory
-from rl.env import FuzzingEnv
+from rl.fuzzing_action import FuzzingAction
+from rl.train import double_dqn_targets
 import torch
 from torch import optim
 import torch.nn as nn
+from transformer.ast_transformer import embed
 from transformer.tokenizer import ASTTokenizer
 from transformers import RobertaModel
 
 
-NUM_TRAINING_STEPS = 50000  # Number of episodes to train the agent for
+NUM_TRAINING_STEPS = 50000  # Number of steps to train the agent for
 LR = 1e-3  # Learning rate of the AdamW optimizer
 REPLAY_MEMORY_SIZE = 10000  # Size of the replay buffer
 MAX_MUTATIONS = 50  # Maximum number of mutations to apply to the code snippet
+MAX_EPISODE_STEPS = 200  # Maximum number of actions (including moves) per episode
 
 EPS_START = 1  # Starting value of epsilon
 EPS_END = 0.05
@@ -31,52 +31,47 @@ TARGET_UPDATE = 1000  # Number of steps after which the target network is update
 GRADIENT_CLIP = 1  # Maximum value of the gradient during backpropagation
 WARM_UP_STEPS = 0  # Number of steps to collect transitions before training starts
 
-# Weights for each action in epsilon-greedy policy to reduce probability of
-# ending the episode early
+TokenState = tuple[torch.Tensor, torch.Tensor]
+# The next state of a transition: its tokens and valid-action mask, or None if the
+# episode ended
+NextState = Optional[tuple[TokenState, torch.Tensor]]
 
 
 def get_state_embedding(
-    state: list[tuple[torch.Tensor, torch.Tensor]],
+    states: list[TokenState],
     ast_net: RobertaModel,
     tokenizer: ASTTokenizer,
     device: torch.device,
 ) -> torch.Tensor:
-    flattened_state = [item for sublist in state for item in sublist]
+    flattened_state = [item for pair in states for item in pair]
     batch = tokenizer.pad_batch(flattened_state, device)
-    state_embedding = ast_net(**batch).pooler_output.view(len(state), -1)
-    return state_embedding
+    embeddings = embed(ast_net, batch["input_ids"], batch["attention_mask"])
+    return embeddings.view(len(states), -1)
 
 
-# Select action based on epsilon-greedy policy
+# Select action based on epsilon-greedy policy over the valid actions
 def epsilon_greedy(
     ast_net: RobertaModel,
     tokenizer: ASTTokenizer,
     policy_net: DQN,
-    state: tuple[torch.Tensor, torch.Tensor],
-    env: FuzzingEnv,
+    state: TokenState,
+    mask: np.ndarray,
     step: int,
     device: torch.device,
-) -> torch.Tensor:
-    sample = random.random()
+) -> int:
     eps_threshold = max(EPS_END, (EPS_DECAY**step) * EPS_START)
 
-    if sample > eps_threshold:
-        # Sample action from model depending of state
+    if random.random() > eps_threshold:
         with torch.no_grad():
-            # Get the code snippet embedding
-            values = policy_net(
-                get_state_embedding([state], ast_net, tokenizer, device)
+            values = policy_net(get_state_embedding([state], ast_net, tokenizer, device))
+            values = values.masked_fill(
+                ~torch.from_numpy(mask).to(device).unsqueeze(0), float("-inf")
             )
             logging.debug(f"Q-values: {values}")
-            return values.argmax().view(1, 1)
+            return int(values.argmax().item())
 
     logging.debug(f"Random action selected, epsilon = {eps_threshold}")
-    # Sample random action
-    return torch.tensor(
-        [[env.action_space.sample()]],
-        device=device,
-        dtype=torch.long,
-    )
+    return int(random.choice(np.flatnonzero(mask)))
 
 
 def soft_update_params(policy_net: DQN, target_net: DQN, tau: float = TAU):
@@ -97,64 +92,49 @@ def optimise_model(
     policy_net: DQN,
     target_net: DQN,
     optimizer: optim.Optimizer,
-    # lr_scheduler: optim.lr_scheduler.LambdaLR,
     memory: ReplayMemory,
     device: torch.device,
     batch_size: int = BATCH_SIZE,
     gamma: float = GAMMA,
 ) -> float:
-    # If the replay buffer is not full, do not optimise
     if len(memory) < batch_size:
         return 0.0
 
     transitions = memory.sample(batch_size)
     states, actions, next_states, rewards = zip(*transitions)
-    batch = BatchTransition(states, actions, next_states, rewards)  # type: ignore
 
-    non_final_mask = torch.tensor(
-        tuple(map(lambda s: s is not None, batch.next_states)),
-        device=device,
-        dtype=torch.bool,
-    )
-    non_final_next_states = [s for s in batch.next_states if s is not None]
+    action_batch = torch.tensor(actions, dtype=torch.long, device=device)
+    reward_batch = torch.tensor(rewards, dtype=torch.float32, device=device)
+    dones = torch.tensor([s is None for s in next_states], device=device)
 
-    # states_batch = torch.cat(batch.states)
-    # next_states_batch = torch.cat(non_final_next_states)
-    action_batch = torch.cat(batch.actions)
-    reward_batch = torch.cat(batch.rewards)
-
-    states_batch_embedded = get_state_embedding(
-        batch.states, ast_net, tokenizer, device
+    state_action_values = (
+        policy_net(get_state_embedding(list(states), ast_net, tokenizer, device))
+        .gather(1, action_batch.unsqueeze(1))
+        .squeeze(1)
     )
 
-    print(states_batch_embedded.shape)
-    print(action_batch.shape)
-    state_action_values = policy_net(states_batch_embedded).gather(1, action_batch)
-    next_state_values = torch.zeros(batch_size, device=device)
+    # Terminal transitions still need a placeholder next state for batching; its
+    # value is zeroed by the done flag
+    next_tokens = [s[0] if s is not None else states[i] for i, s in enumerate(next_states)]
+    all_actions = torch.ones(len(FuzzingAction), dtype=torch.bool)
+    next_masks = torch.stack(
+        [s[1] if s is not None else all_actions for s in next_states]
+    ).to(device)
+
     with torch.no_grad():
-        next_states_batch_embedded = get_state_embedding(
-            non_final_next_states, ast_net, tokenizer, device
-        )
-        next_state_values[non_final_mask] = (
-            target_net(next_states_batch_embedded)
-            .gather(1, policy_net(next_states_batch_embedded).argmax(1, keepdim=True))
-            .squeeze()
-        )
+        next_embeddings = get_state_embedding(next_tokens, ast_net, tokenizer, device)
 
-    # Compute the expected Q values
-    expected_state_action_values = (next_state_values * gamma) + reward_batch
+    expected_state_action_values = double_dqn_targets(
+        policy_net, target_net, reward_batch, next_embeddings, dones, next_masks, gamma
+    )
 
-    # Compute Huber loss
-    criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+    loss = nn.functional.smooth_l1_loss(state_action_values, expected_state_action_values)
 
-    # Optimize the model
+    # Optimize both the DQN and the AST Transformer
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
 
-    # In-place gradient clipping
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), GRADIENT_CLIP)  # type: ignore
     optimizer.step()
-    # lr_scheduler.step()
 
     return loss.item()

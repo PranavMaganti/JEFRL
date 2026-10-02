@@ -1,7 +1,6 @@
 """Trasnforms AST dictionary into a tree of Node objects."""
 from __future__ import annotations
 
-import abc
 import copy
 import dataclasses
 from dataclasses import dataclass
@@ -31,9 +30,15 @@ context_fields = {"parent", "scope", "end_scope", "origin_file"}
 # Set of children fields that should not be children
 non_child_fields = {"id"}
 
+# Node fields per class. dataclasses.fields() is slow and fields is used by every
+# traversal, copy and code generation, so it is computed once per class.
+_fields_cache: dict[type, list[str]] = {}
+# Fields copied by __deepcopy__, per class
+_copy_fields_cache: dict[type, list[str]] = {}
+
 
 @dataclass(kw_only=True, slots=True)
-class Node(metaclass=abc.ABCMeta):
+class Node:
     """Abstract Node class which defines node operations"""
 
     # loc: Optional[dict[str, int]]
@@ -61,10 +66,14 @@ class Node(metaclass=abc.ABCMeta):
 
     @property
     def fields(self) -> list[str]:
-        """list of node fields"""
-        return ["type"] + [
-            f.name for f in dataclasses.fields(self) if f.name not in context_fields
-        ]
+        """list of node fields (shared between nodes, do not modify)"""
+        fields = _fields_cache.get(self.__class__)
+        if fields is None:
+            fields = ["type"] + [
+                f.name for f in dataclasses.fields(self) if f.name not in context_fields
+            ]
+            _fields_cache[self.__class__] = fields
+        return fields
 
     def traverse(self) -> Generator[Node, None, None]:
         """Pre-order traversal of this node and all of its children."""
@@ -173,8 +182,8 @@ class Node(metaclass=abc.ABCMeta):
         try:
             return escodegen.generate(self)  # type: ignore
         except Exception:
-            print(self)
-            logging.error("Error generating code")
+            # Printing the whole AST here is very slow for large programs
+            logging.debug("Error generating code", exc_info=True)
             return None
 
     def __repr__(self) -> str:
@@ -190,16 +199,37 @@ class Node(metaclass=abc.ABCMeta):
     def __iter__(self):
         return self.__iter__
 
-    def __deepcopy__(self, _memo: dict[int, Any]):
-        return self.__class__(
-            **copy.deepcopy(
-                {
-                    k.name: getattr(self, k.name)
-                    for k in dataclasses.fields(self)
-                    if k.name not in {"parent", "scope", "end_scope"}
-                }
-            )
-        )
+    def __deepcopy__(self, memo: dict[int, Any]):
+        # Copies the tree directly rather than through copy.deepcopy's generic
+        # machinery, which dominated the cost of starting each fuzzing episode.
+        # Parents are re-linked by __post_init__; scopes are recomputed as needed.
+        cls = self.__class__
+        names = _copy_fields_cache.get(cls)
+        if names is None:
+            names = [
+                f.name
+                for f in dataclasses.fields(self)
+                if f.name not in {"parent", "scope", "end_scope"}
+            ]
+            _copy_fields_cache[cls] = names
+
+        kwargs: dict[str, Any] = {}
+        for name in names:
+            val = getattr(self, name)
+            if isinstance(val, Node):
+                val = val.__deepcopy__(memo)
+            elif isinstance(val, list):
+                val = [
+                    item.__deepcopy__(memo)
+                    if isinstance(item, Node)
+                    else copy.deepcopy(item, memo)
+                    for item in val
+                ]
+            elif not isinstance(val, (str, int, float, bool, type(None))):
+                val = copy.deepcopy(val, memo)
+            kwargs[name] = val
+
+        return cls(**kwargs)
 
     def __getstate__(self):
         return {

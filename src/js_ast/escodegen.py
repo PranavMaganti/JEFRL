@@ -654,8 +654,11 @@ def escapeString(string):
 
     for i in range(len(string)):
         code = ord(string[i])
+        # Escape the quote character in use, and keep every character (the port
+        # previously dropped all characters except the quotes, unescaped)
         if (code == 0x27 and single) or (code == 0x22 and not single):
-            result += chr(code)
+            result += "\\"
+        result += chr(code)
 
     return result + quote
 

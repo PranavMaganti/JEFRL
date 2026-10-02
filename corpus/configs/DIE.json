@@ -5,7 +5,7 @@
     },
     {
         "folder_name": "firefox",
-        "lib_path": "corpus/libs/chakracore.js"
+        "lib_path": "corpus/libs/spidermonkey.js"
     },
     {
         "folder_name": "jit",

@@ -25,7 +25,9 @@ class ASTTokenizer:
     def tokenize(self, ast: Node) -> list[int]:
         frag_seq: list[dict[str, Any]] = []
         node_types: set[str] = set()
-        node_to_frags(ast, frag_seq, node_types, max_len=self.max_len)
+        # Leave room for the CLS token so sequences never exceed max_len
+        max_frags = self.max_len - 1 if self.max_len is not None else None
+        node_to_frags(ast, frag_seq, node_types, max_len=max_frags)
 
         return self.frag_seq_to_ids(frag_seq)
 
@@ -43,7 +45,6 @@ class ASTTokenizer:
                 if oov_frag_hash in self.token_to_id:
                     frag_id_seq.append(self.token_to_id[oov_frag_hash])
                 else:
-                    print(f"UNK_TOKEN: {frag_hash}")
                     frag_id_seq.append(self.token_to_id[UNK_TOKEN])
 
         if self.max_len is None or len(frag_id_seq) < self.max_len:
@@ -54,11 +55,12 @@ class ASTTokenizer:
     def pad_batch(
         self, batch: list[torch.Tensor], device: torch.device
     ) -> dict[str, torch.Tensor]:
-        inputs = torch.nn.utils.rnn.pad_sequence(list(batch), batch_first=True).to(
-            device
-        )
+        pad_id = self.token_to_id[PAD_TOKEN]
+        inputs = torch.nn.utils.rnn.pad_sequence(
+            list(batch), batch_first=True, padding_value=pad_id
+        ).to(device)
         attention_mask = torch.ones_like(inputs, device=device)
-        attention_mask[inputs == self.token_to_id[PAD_TOKEN]] = 0
+        attention_mask[inputs == pad_id] = 0
 
         return {
             "input_ids": inputs,

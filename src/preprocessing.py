@@ -9,8 +9,6 @@ import sys
 from js_ast.analysis import scope_analysis
 from preprocessing.filter import filter_corpus_by_coverage
 from preprocessing.filter import filter_corpus_by_length
-from preprocessing.normalise import normalize_ast
-from preprocessing.sanitise import sanitise_ast
 from preprocessing.vocabulary import get_frag_counts
 from preprocessing.vocabulary import get_frag_data
 from preprocessing.vocabulary import get_vocab
@@ -18,7 +16,7 @@ from tqdm import tqdm
 from transformer.tokenizer import ASTTokenizer
 
 from utils.js_engine import Engine
-from utils.js_engine import V8Engine
+from utils.js_engine import TIMEOUT
 from utils.loader import get_subtrees
 from utils.loader import load_corpus
 from utils.logging import setup_logging
@@ -38,6 +36,14 @@ parser.add_argument(
     help="The path to the engine to use for preprocessing",
 )
 parser.add_argument(
+    "--engine-mode", choices=["auto", "reprl", "subprocess", "remote"], default="auto"
+)
+parser.add_argument("--engine-arg", action="append", default=[])
+parser.add_argument("--timeout", type=float, default=TIMEOUT)
+parser.add_argument(
+    "--workers", type=int, default=4, help="Number of engines executing seeds in parallel"
+)
+parser.add_argument(
     "--corpus",
     type=Path,
     default=Path("corpus/DIE"),
@@ -55,6 +61,11 @@ parser.add_argument(
     default=Path("data/"),
     help="The path to the output directory where processed files will be stored",
 )
+parser.add_argument(
+    "--engine-address",
+    default="localhost:9000",
+    help="host:port of an engine server (src/utils/engine_server.py) for --engine-mode remote",
+)
 args = parser.parse_args()
 
 # System setup
@@ -64,7 +75,7 @@ sys.setrecursionlimit(10000)
 setup_logging()
 
 
-if not args.engine_executable.exists():
+if args.engine_mode != "remote" and not args.engine_executable.exists():
     raise FileNotFoundError(f"Engine not found: {args.engine_executable}")
 
 if not args.corpus.exists():
@@ -79,14 +90,26 @@ if not args.output.exists():
 with open(args.corpus_config, "r") as f:
     corpus_config = json.load(f)
 
-engine = Engine.get_engine(args.engine_name, args.engine_executable)
+engines = [
+    Engine.get_engine(
+        args.engine_name, args.engine_executable, args.engine_mode, args.timeout, args.engine_arg,
+        address=args.engine_address,
+    )
+    for _ in range(max(1, args.workers))
+]
+logging.info(f"Engine: {type(engines[0]).__name__} x {len(engines)}")
 
-V8Engine(args.engine_executable)
-corpus = load_corpus(engine, args.corpus, corpus_config)
-
-for state in tqdm(corpus, desc="Normalising corpus"):
-    sanitise_ast(state.root)
-    normalize_ast(state.root)
+# Seeds are sanitised and normalised before being executed, so their coverage
+# matches the code the fuzzer runs. Seeds which crash the engine are listed in
+# seed_crashes.txt: on an old engine these are known bugs, and a good check that
+# crash detection works.
+try:
+    corpus = load_corpus(
+        engines, args.corpus, corpus_config, crash_log=args.output / "seed_crashes.txt"
+    )
+finally:
+    for engine in engines:
+        engine.close()
 
 # Get subtrees before length filtering as we can still use subtrees from long programs
 subtrees = get_subtrees(corpus)

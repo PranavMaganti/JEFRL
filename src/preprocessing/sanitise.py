@@ -11,9 +11,10 @@ from js_ast.nodes import ThrowStatement
 def sanitise_node(node: Node) -> bool:
     if isinstance(node, ExpressionStatement):
         if isinstance(node.expression, CallExpression):
-            if node.expression.callee.name and (
-                "assert" in node.expression.callee.name
-                or "print" in node.expression.callee.name
+            callee_name = node.expression.callee.name
+            # Case-insensitive so natives like %DebugPrint (which flood stdout) go too
+            if callee_name and (
+                "assert" in callee_name or "print" in callee_name.lower()
             ):
                 return True
 

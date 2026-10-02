@@ -1,71 +1,173 @@
 # JEFRL: JavaScript Engine Fuzzing using Reinforcement Learning
 
+JEFRL fuzzes JavaScript engines by letting a Double DQN agent navigate and mutate the
+AST of seed programs, rewarded by the engine coverage its mutations reach. See the
+[report](write-up.pdf) for the design.
+
 ## Prerequisites
 
-Before running the code you will need to build the JavaScript engine by running the following commands (docker required):
+### Building V8
+
+The engine is built in Docker (x64 Linux, which matches the toolchain V8 8.5 expects;
+on Apple Silicon it runs under Rosetta):
 
 ```bash
 cd engines/v8
-docker build -t v8-build .
-docker run -it -v .:/v8 v8-build /v8/build.sh
+docker build --platform linux/amd64 -t v8-build .
+docker run --platform linux/amd64 -it -v "$PWD":/v8 v8-build            # out/fuzzbuild/d8
+docker run --platform linux/amd64 -it -v "$PWD":/v8 -e BUILD=asan v8-build  # optional, for triaging crashes
 sudo chown -R $USER:$USER . # to change ownership of the files created by docker back to the user
 ```
 
-Additionally, to run the code, you need to first need a working version of python3.11 on your machine and you will then need to install [poetry](https://python-poetry.org/).  We use poetry to initialise all our Python dependencies and virtual environment. To setup poetry run the following in the root of our project :
+`v8_fuzzilli=true` adds Fuzzilli's coverage instrumentation and its REPRL mode to d8.
+In REPRL mode one d8 process runs many inputs instead of being started for each one,
+which is much faster. The fuzzing build leaves ASan out for speed; re-run crashes on
+the `asan` build to get a report.
 
+### Python
+
+Python 3.11 with the dependencies in `pyproject.toml` (`poetry install`), or with uv:
+
+```bash
+uv venv -p 3.11 && uv pip install "esprima==4.0.1" "numpy<2" tqdm "transformers>=4.40,<5" \
+    torch strenum "gymnasium>=0.28,<1" esutils escodegen pytest
 ```
-poetry shell
-poetry install
+
+Pre-training uses a CUDA GPU or Apple Silicon (MPS) if available. Fuzzing uses a frozen
+model, so it runs fine on CPU.
+
+### Where to run the fuzzer
+
+On a Linux x64 machine, run everything directly with `--engine-mode reprl` (the default
+picks it automatically).
+
+On a Mac, d8 is a Linux binary that has to run in a container under Rosetta, where
+PyTorch has no vector instructions and is 10-40x slower. So run only the engines in the
+container, behind an engine server, and the fuzzer natively (using the GPU):
+
+```bash
+docker build --platform linux/amd64 -f Dockerfile.fuzzer -t jefrl-fuzzer .
+docker run -d --name jefrl-engine --platform linux/amd64 --shm-size=2g \
+    -p 127.0.0.1:9000:9000 -e PYTHONPATH=src -v "$PWD":/jefrl jefrl-fuzzer \
+    python3 -m utils.engine_server --port 9000
 ```
+
+Then pass `--engine-mode remote --engine-address localhost:9000` to the scripts below
+instead of `--engine-executable`. The server starts one REPRL d8 per worker. The
+container can also run the scripts directly (`docker run ... jefrl-fuzzer python3 src/...`),
+which is fine for pre-processing but slow for anything using the model.
+
+### Check the engine build
+
+Before a long run, check that REPRL, coverage and crash detection work:
+
+```bash
+python3 src/check_engine.py --engine-executable engines/v8/v8/out/fuzzbuild/d8
+```
+
+This runs `fuzzilli('FUZZILLI_CRASH', n)` to make sure real crashes are detected, and
+reports execs/s per worker.
 
 ## Running the fuzzer
 
-As mentioned in the [Report](https://github.com/vanpra/js-rl/blob/main/write-up.pdf), JEFRL uses a three stage training process which includes: pre-training of the AST Transformer, fine-tuning of the AST Transformer, and finally, running the fuzzer. In addition to this we also have a pre-training step to process all the data required for all of these steps. 
+JEFRL has a pre-processing step and then three stages: pre-training the AST Transformer,
+(optionally) fine-tuning it, and fuzzing.
 
 ### Stage 0: Pre-processing
 
-For our training we made use of [DIE-corpus](https://github.com/sslab-gatech/DIE-corpus), which includes seed inputs from various different JavaScript engine test suites and also past vulnerability PoCs. First start by cloning the DIE-corpus into the folder `corpus` as `DIE`:
+We use the [DIE-corpus](https://github.com/sslab-gatech/DIE-corpus), which includes
+seeds from engine test suites and PoCs of past vulnerabilities:
 
 ```bash
 git clone git@github.com:sslab-gatech/DIE-corpus.git corpus/DIE
+python3 src/preprocessing.py --engine-executable engines/v8/v8/out/fuzzbuild/d8
 ```
 
-After this we can run our pre-processing stage using the following command:
+Seeds are parsed (keeping V8 natives syntax such as `%OptimizeFunctionOnNextCall`),
+sanitised and normalised, then executed with their test harness to record coverage.
+Output goes to `data/`. Seeds that crash the engine are listed in
+`data/seed_crashes.txt`: on an old engine these are known bugs, and a good sign that
+crash detection works.
 
-```
-python3 src/preprocessing.py
-```
+### Stage 1: Pre-training the AST Transformer
 
-This will save all the necessary file to the directory `data`
-
-### Stage 1: Pre-training AST Transformer
-
-To run pre-training a machine with a powerful GPU is required. We used an NVIDIA A30 to pre-train and fine-tune our transformer. To run the pre-training use the following command:
-
-```
-python3 src/pretraining.py
+```bash
+python3 src/pretraining.py --epochs 20
 ```
 
-This will create new folder in `out/finetuning` with the name being the timestamp at which you started training. The name of this folder is required for the next stage of training.
+This creates a folder in `out/pretraining/` containing `model_best.pt` (lowest
+validation loss) and a checkpoint per epoch.
 
-### Stage 2: Fine-tuning AST Transformer 
+### Stage 2: Fine-tuning the AST Transformer (optional)
 
-We can run the fine-tuning step by using the following command:
+Trains the DQN and the Transformer together, then keeps the Transformer weights:
 
-```
-python3 src/finetuning.py --pretraining-path <path-to-pretraing-out-folder> --pretraing-step <step-of-the-pretraining-to-use>
-```
-
-This will create new folder in `out/finetuning` with the name being the timestamp at which you started fine-tuning. The name of this folder is required for the next stage.
-
-### Stage 3: Running the fuzzer
-
-For this step we no longer require a powerful GPU as our transformer is now frozen. We can run the fuzzer using the following command:
-```
-python3 src/main.py --finetuning-path <path-to-finetuning-out-folder> --finetuning-step <step-of-the-finetuning-to-use>
+```bash
+python3 src/finetuning.py --pretraining-path out/pretraining/<run> --pretraining-step best
 ```
 
-The final model along with run results for every stage are store in `out/rl-training`
+In the report fine-tuning made little difference to coverage, so the fuzzer can use the
+pre-trained model directly.
+
+### Stage 3: Fuzzing
+
+```bash
+python3 src/main.py --ast-model out/pretraining/<run>/model_best.pt \
+    --engine-executable engines/v8/v8/out/fuzzbuild/d8 --workers 6 --max-hours 72
+```
+
+- `--workers N` runs N environments, each with its own engine process, sharing one
+  corpus and coverage map. Use about one per core.
+- `--max-hours` stops after a wall-clock time, for comparing against other fuzzers.
+- `--engine-arg` passes extra flags to d8, e.g. `--engine-arg=--interrupt-budget=1024`
+  to make V8 optimise functions sooner.
+- `--engine-mode subprocess` starts a process per execution (slow; for engines without REPRL).
+- `--seed-selection fast` picks the corpus program each episode starts from in proportion
+  to how quickly its episodes execute (as AFL favours fast inputs), which stops the
+  corpus drifting towards slow programs. The default, `uniform`, picks uniformly.
+
+Runs are resumable. The networks, optimiser, replay buffer, corpus, coverage and
+statistics are checkpointed every 30 minutes (`--checkpoint-minutes`) and whenever the
+run stops, including on Ctrl-C or `kill`. To continue a stopped run:
+
+```bash
+python3 src/main.py --resume out/rl-training/<run> --engine-mode remote --engine-address localhost:9000 --workers 6
+```
+
+It keeps the original model, data, step limit and `--max-hours` (which counts the total
+time across resumes), while engine options and the number of workers can change.
+
+Results are written to `out/rl-training/<run>/`:
+
+- `interesting/`: programs that increased coverage (`*_coverage.js`) or crashed the
+  engine (`*_crash.js`, with its output in the matching `.txt`)
+- `training/stats.jsonl`: one line per minute with coverage, execs/s, crashes, action
+  counts and the distribution of execution errors
+- `training/models/`: DQN checkpoints
+
+### Random baseline
+
+```bash
+python3 src/baseline.py --engine-executable engines/v8/v8/out/fuzzbuild/d8 --workers 6 --max-hours 72
+```
+
+Picks uniformly among the valid actions, which is the fair comparison for the DQN agent.
+`--unmasked` reproduces the original baseline, which also picks actions that cannot apply.
+
+It records the same `stats.jsonl` and coverage curves as the DQN fuzzer, so
+`python3 src/status.py out/baseline/<run>` works on it too, and it is checkpointed and
+resumed the same way (`--resume out/baseline/<run>`). For a fair comparison, give both
+the same `--workers`, `--timeout` and `--max-hours`, and run them one after the other
+rather than at the same time.
+
+### Tests
+
+```bash
+python3 -m pytest
+```
+
+The engine tests use `tests/utils/fake_d8.py`, a stand-in that speaks the REPRL protocol,
+so they don't need a V8 build.
 
 ## Project Timeline
 
